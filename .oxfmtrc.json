@@ -1,0 +1,25 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "printWidth": 80,
+  "singleQuote": false,
+  "sortPackageJson": false,
+  "sortImports": {
+    "internalPattern": ["@ghostlyjs/"],
+    "newlinesBetween": true,
+    "groups": [
+      "builtin",
+      "external",
+      ["internal", "subpath"],
+      ["parent", "sibling", "index"],
+      "style",
+      "unknown"
+    ]
+  },
+  "ignorePatterns": [
+    "**/dist/**",
+    "**/coverage/**",
+    "**/.next/**",
+    "**/.ghostly/**",
+    "bun.lock"
+  ]
+}
