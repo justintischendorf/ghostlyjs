@@ -1,0 +1,38 @@
+{
+  "name": "ghostlyjs",
+  "version": "0.0.1",
+  "description": "Auto-generate skeleton loaders for React by measuring your real UI. No more hand-written skeletons.",
+  "keywords": [
+    "react",
+    "skeleton",
+    "skeleton-loader",
+    "loading-state",
+    "skeleton-screen"
+  ],
+  "license": "MIT",
+  "author": "Justin Tischendorf",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/justintischendorf/ghostlyjs.git",
+    "directory": "packages/ghostlyjs"
+  },
+  "homepage": "https://github.com/justintischendorf/ghostlyjs#readme",
+  "bugs": {
+    "url": "https://github.com/justintischendorf/ghostlyjs/issues"
+  },
+  "files": [
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^7"
+  }
+}
