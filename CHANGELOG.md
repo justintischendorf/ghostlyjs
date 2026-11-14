@@ -6,8 +6,64 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `<Ghost>` component: shows its children once `isLoading` is false,
+  otherwise a skeleton built from the measurement stored under its `name`.
+  ([#14], [#15])
+- `<GhostlyProvider>` passes the measurements from `ghostly.json` to every
+  `<Ghost>` in the app. ([#14])
+- Measuring in dev mode: `<Ghost>` measures the real rendered content (text
+  lines, surfaces, images, icons, form controls, Shadow DOM) instead of
+  using predefined variants. Production builds don't measure. ([#15])
+- Skeletons draw the measured boxes, adapt to the available width and work
+  in light and dark mode. ([#16], [#17])
+- `ghostly dev` command: a local collector that receives the measurements
+  from the browser and writes them to `ghostly.json`. ([#17])
+- A single placeholder bar for a `<Ghost>` that was never measured. ([#19])
+- Package entries: `ghostlyjs` (React), `ghostlyjs/core` and the `ghostly`
+  command, built with tsdown. ([#13])
+- Logo. ([#20])
+- Next.js playground with pages for common layouts, real async loading and
+  edge cases. ([#14], [#18], [#20])
+- Linting and formatting with oxlint and oxfmt, CI checks, PR template and
+  Dependabot. ([#4], [#5], [#9], [#11])
+- MIT license and security policy. ([#7], [#12])
+
+### Fixed
+
+- More accurate skeletons: centered and right-aligned content, height of
+  text-only content, divider borders no longer drawn as surfaces, text
+  split into pieces joined per line, no text bars inside filled circles,
+  overflow clipping (`truncate`, `line-clamp`, scroll areas), rotated and
+  scaled elements, inline images and rounded icons. ([#19])
+- The placeholder package can be published to npm. ([#3])
+
 ## [0.0.1] - 2026-11-13
 
 ### Added
 
 - Placeholder package `ghostlyjs` on npm to reserve the name. Not usable yet.
+  ([#1], [#2])
+
+[Unreleased]: https://github.com/justintischendorf/ghostlyjs/compare/v0.0.1...HEAD
+[0.0.1]: https://github.com/justintischendorf/ghostlyjs/releases/tag/v0.0.1
+[#1]: https://github.com/justintischendorf/ghostlyjs/pull/1
+[#2]: https://github.com/justintischendorf/ghostlyjs/pull/2
+[#3]: https://github.com/justintischendorf/ghostlyjs/pull/3
+[#4]: https://github.com/justintischendorf/ghostlyjs/pull/4
+[#5]: https://github.com/justintischendorf/ghostlyjs/pull/5
+[#7]: https://github.com/justintischendorf/ghostlyjs/pull/7
+[#9]: https://github.com/justintischendorf/ghostlyjs/pull/9
+[#11]: https://github.com/justintischendorf/ghostlyjs/pull/11
+[#12]: https://github.com/justintischendorf/ghostlyjs/pull/12
+[#13]: https://github.com/justintischendorf/ghostlyjs/pull/13
+[#14]: https://github.com/justintischendorf/ghostlyjs/pull/14
+[#15]: https://github.com/justintischendorf/ghostlyjs/pull/15
+[#16]: https://github.com/justintischendorf/ghostlyjs/pull/16
+[#17]: https://github.com/justintischendorf/ghostlyjs/pull/17
+[#18]: https://github.com/justintischendorf/ghostlyjs/pull/18
+[#19]: https://github.com/justintischendorf/ghostlyjs/pull/19
+[#20]: https://github.com/justintischendorf/ghostlyjs/pull/20

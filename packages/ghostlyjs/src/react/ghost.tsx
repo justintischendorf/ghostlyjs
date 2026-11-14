@@ -60,10 +60,6 @@ function sendToCollector(body: string): void {
   void collectorOnline.then((online) => online && send());
 }
 
-// The text color, faint: grey on light and on dark pages. Overlapping boxes
-// (text on a card) stack and look darker.
-const fill = { backgroundColor: "currentColor", opacity: 0.1 };
-
 function GhostSkeleton({
   measurement,
 }: {
@@ -72,7 +68,7 @@ function GhostSkeleton({
   // Never measured yet: one bar, so the user still sees that something
   // loads. It is replaced once the real content was shown in dev.
   if (!measurement) {
-    return <div style={{ ...fill, height: "1.25em", borderRadius: 4 }} />;
+    return <div className="ghostly-placeholder" />;
   }
   const { width } = measurement;
   const percent = (px: number) => `${(px / width) * 100}%`;
@@ -84,8 +80,8 @@ function GhostSkeleton({
     // the real content takes as much as it needs), so it keeps the measured
     // width and its neighbours get the rest.
     <div
+      className="ghostly-skeleton"
       style={{
-        position: "relative",
         width: "100%",
         maxWidth: width,
         height: measurement.height,
@@ -98,8 +94,8 @@ function GhostSkeleton({
       {measurement.boxes.map((box, index) => (
         <div
           key={index}
+          className="ghostly-box"
           style={{
-            position: "absolute",
             left: percent(box.x),
             top: box.y,
             // Wide boxes (cards, text lines) stretch with the frame. Square-ish
@@ -113,7 +109,6 @@ function GhostSkeleton({
             height: box.height,
             borderRadius: box.radius,
             transform: box.rotate ? `rotate(${box.rotate}deg)` : undefined,
-            ...fill,
           }}
         />
       ))}

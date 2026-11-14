@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 // The repo logo, shared with the README (no copy in public/).
 import logo from "../../../assets/logo.svg";
 import { LoadingToggle } from "./loading";
+import ThemeToggle from "./theme-toggle";
 
 const links = [
   { href: "/", label: "Overview" },
@@ -44,7 +45,8 @@ export default function Nav() {
           ))}
         </nav>
         {/* /async loads for real, so the toggle would do nothing there */}
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2">
+          <ThemeToggle />
           {pathname !== "/async" && <LoadingToggle />}
         </div>
       </div>
