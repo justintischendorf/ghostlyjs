@@ -13,11 +13,8 @@ switch (command) {
   case "dev":
     startDevServer();
     break;
-  case "generate":
-    console.log("ghostly generate: not implemented yet");
-    break;
   default:
-    console.log("Usage: ghostly <dev|generate>");
+    console.log("Usage: ghostly dev");
     process.exitCode = command ? 1 : 0;
 }
 

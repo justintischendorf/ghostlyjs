@@ -29,5 +29,5 @@ data never leaves your machine. Reports about this server (for example,
 ways to reach it from outside localhost or to write files outside the
 project) are especially welcome.
 
-The generated skeleton files and the production runtime do not need the
-dev server.
+The dev server is only needed while developing. Your production app
+only reads `ghostly.json` and never talks to it.
