@@ -13,6 +13,12 @@
     "dev": {
       "cache": false,
       "persistent": true
+    },
+    "test": {},
+    "test:e2e": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "passThroughEnv": ["CI"]
     }
   }
 }

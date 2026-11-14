@@ -4,6 +4,8 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
+    "test": "turbo run test",
+    "test:e2e": "turbo run test:e2e",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "format": "oxfmt .",

@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // The tests run in Node; the DOM lib from the base covers the code
+    // inside `page.evaluate`, which runs in the browser.
+    "types": ["node"]
+  },
+  "include": ["tests", "playwright.config.ts"]
+}
