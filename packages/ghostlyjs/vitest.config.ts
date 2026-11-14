@@ -12,6 +12,20 @@ const browser = () => ({
   instances: [{ browser: "chromium" as const }],
 });
 
+// Bundle React before the tests start. Otherwise Vite finds a module like
+// `react/jsx-runtime` only while the tests run, bundles it and reloads the
+// test page. That reload breaks a test file that is just starting ("failed
+// to find the current suite"), mostly in CI, where there is no cache yet.
+const optimizeDeps = {
+  include: [
+    "react",
+    "react/jsx-runtime",
+    "react/jsx-dev-runtime",
+    "react-dom",
+    "react-dom/client",
+  ],
+};
+
 // <Ghost> only measures when `process.env.NODE_ENV` is "development". The
 // bundler replaces that value while building, so it can't be changed inside
 // a test: each mode gets its own project instead.
@@ -31,6 +45,7 @@ export default defineConfig({
       },
       {
         define: nodeEnv("development"),
+        optimizeDeps,
         test: {
           name: "react-dev",
           include: ["src/react/**/*.test.tsx"],
@@ -43,6 +58,7 @@ export default defineConfig({
         // JSX for production React; its dev helper `jsxDEV` doesn't exist
         // there.
         oxc: { jsx: { development: false } },
+        optimizeDeps,
         test: {
           name: "react-prod",
           include: ["src/react/**/*.prod.test.tsx"],
