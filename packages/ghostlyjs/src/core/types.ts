@@ -15,6 +15,9 @@ export type GhostBoxContent = {
 export type GhostBoxMeasurement = {
   width: number;
   height: number;
+  // CSS `flex-shrink` of the content (0 for `shrink-0`), so the skeleton
+  // shrinks in a flex row like the real content does.
+  flexShrink?: number;
   boxes: GhostBoxContent[];
 };
 

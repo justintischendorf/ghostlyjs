@@ -89,7 +89,15 @@ export function measureElement(root: Element): GhostBoxMeasurement {
 
   measure(root);
 
-  return { width: round(frame.width), height: round(frame.height), boxes };
+  const content = root.firstElementChild;
+  return {
+    width: round(frame.width),
+    height: round(frame.height),
+    flexShrink: content
+      ? parseFloat(getComputedStyle(content).flexShrink)
+      : undefined,
+    boxes,
+  };
 }
 
 // The rectangle around all direct children of `root`. Element boxes, not
