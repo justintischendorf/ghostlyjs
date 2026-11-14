@@ -162,7 +162,10 @@ const cases: {
     name: "video",
     title: "Video",
     content: (
-      <video className="aspect-video w-full rounded-xl bg-foreground" controls />
+      <video
+        className="aspect-video w-full rounded-xl bg-foreground"
+        controls
+      />
     ),
   },
   {
