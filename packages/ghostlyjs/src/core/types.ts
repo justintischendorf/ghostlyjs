@@ -25,6 +25,16 @@ export type GhostBoxMeasurement = {
   // because TypeScript reads strings from an imported JSON file as `string`.
   align?: string;
   boxes: GhostBoxContent[];
+  // Lists only (<Ghost count>): the boxes are those of the first item, and
+  // this is how many items there were when measured.
+  count?: number;
+};
+
+// Options for `measureElement`.
+export type MeasureOptions = {
+  // The children are the items of a list: measure only the first one and
+  // count them.
+  list?: boolean;
 };
 
 // All measured skeletons, keyed by the `name` prop of <Ghost>.

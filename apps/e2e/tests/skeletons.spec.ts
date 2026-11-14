@@ -21,7 +21,22 @@ const TOLERANCE = 1;
 
 type Rect = { x: number; y: number; width: number; height: number };
 type Box = Rect & { rotate?: number };
-type Frame = Rect & { label: string; boxes: Box[] };
+type Frame = Rect & { boxes: Box[] };
+
+// The content of one <Ghost>, measured both ways, because only the
+// skeletons show whether it is a list (<Ghost count>).
+type Content = {
+  name: string;
+  label: string;
+  // All children measured as one frame (a normal <Ghost>).
+  whole: Frame;
+  // Only the first item (a list), and the frames of all items.
+  firstItem: Frame;
+  items: Rect[];
+};
+
+// One drawn skeleton; `null` frame for a placeholder (never measured).
+type Skeleton = { name: string; frame: Frame | null };
 
 // The built measuring code of `ghostlyjs/core`, made available to the page
 // as `window.ghostlyTest`. `measureFrame` is not exported, but the bundle
@@ -39,19 +54,23 @@ ${readFileSync(
 declare global {
   interface Window {
     ghostlyTest: {
-      measureElement: (root: Element) => {
-        width: number;
-        height: number;
-        boxes: Box[];
-      };
-      measureFrame: (root: Element) => DOMRect;
+      measureElement: (
+        root: Element,
+        options?: { list?: boolean },
+      ) => { width: number; height: number; boxes: Box[] };
+      measureFrame: (nodes: Node[]) => DOMRect;
     };
   }
 }
 
-// The wrapper <Ghost> renders around shown content, and its two skeletons.
-const GHOST =
-  'div[style="display: contents;"], .ghostly-skeleton, .ghostly-placeholder';
+// The <Ghost count> lists in the playgrounds. Named here, because a list
+// can look like a normal <Ghost>: in a single column, one skeleton for the
+// whole list would sit right too, but show the wrong number of items.
+const LISTS = new Set(["home-members", "async-client-posts"]);
+
+// What <Ghost> renders: a wrapper around shown content, or its skeletons.
+// `data-ghost` holds the name.
+const SKELETON = ".ghostly-skeleton, .ghostly-placeholder";
 
 test.beforeEach(async ({ page }) => {
   // Never reach a running `ghostly dev`: it would store the measurements of
@@ -82,7 +101,7 @@ test("skeletons on /async show while loading and match the content", async ({
   // `commit`: check before the page finished loading, while the data is
   // still on its way.
   await page.goto("/async", { waitUntil: "commit" });
-  const skeletons = page.locator(".ghostly-skeleton, .ghostly-placeholder");
+  const skeletons = page.locator(SKELETON);
   await expect(skeletons.first()).toBeVisible();
   await loadAllFonts(page);
 
@@ -92,13 +111,15 @@ test("skeletons on /async show while loading and match the content", async ({
     page.getByText(/Loaded (on the server|in the browser)/),
   ).toBeVisible();
 
-  // The posts that load in useEffect: "Load again" shows their skeletons,
-  // drawn from the measurement taken when the content arrived.
+  // The posts that load in useEffect (a <Ghost count>): "Load again" shows
+  // their skeletons, drawn from the measurement taken when they arrived.
   const posts = page.locator("section").filter({ hasText: "useEffect" });
   await page.addScriptTag({ content: measuringScript });
   const contents = await measureContents(posts);
   await posts.getByRole("button", { name: "Load again" }).click();
-  await expect(posts.locator(".ghostly-skeleton")).toHaveCount(contents.length);
+  await expect(posts.locator(".ghostly-skeleton")).toHaveCount(
+    contents[0]?.items.length ?? 0,
+  );
   expectSkeletonsMatch(contents, await measureSkeletons(posts));
 });
 
@@ -116,36 +137,77 @@ async function loadAllFonts(page: Page) {
 }
 
 // Each skeleton must sit where its content was, box by box.
-function expectSkeletonsMatch(
-  contents: (Frame | null)[],
-  skeletons: (Frame | null)[],
-) {
+function expectSkeletonsMatch(contents: Content[], skeletons: Skeleton[]) {
   // Every page has Ghosts; none found means the selector broke, and the
   // checks below would pass without checking anything.
-  expect(contents.filter(Boolean).length).toBeGreaterThan(0);
-  // One skeleton per <Ghost>, in the same order as the content.
-  expect(skeletons).toHaveLength(contents.length);
+  expect(contents.length).toBeGreaterThan(0);
+  // A list measured as items needs more than one, or the item checks below
+  // would check nothing.
+  for (const content of contents) {
+    if (LISTS.has(content.name))
+      expect(content.items.length).toBeGreaterThan(1);
+  }
 
-  for (const [index, content] of contents.entries()) {
-    // A <Ghost> that is always loading (never measured) has no content.
-    if (!content) continue;
-    const skeleton = skeletons[index];
-    const label = `Ghost #${index} ("${content.label}")`;
-    expect.soft(skeleton, `${label}: skeleton missing`).toBeDefined();
-    if (!skeleton) continue;
-
-    expectClose(skeleton, content, `${label}: frame`);
-    expect
-      .soft(skeleton.boxes.length, `${label}: number of boxes`)
-      .toBe(content.boxes.length);
-    for (const [boxIndex, box] of content.boxes.entries()) {
-      const drawn = skeleton.boxes[boxIndex];
-      if (!drawn) continue;
-      expectClose(drawn, box, `${label}: box #${boxIndex}`);
-      expect
-        .soft(drawn.rotate, `${label}: box #${boxIndex} rotate`)
-        .toBe(box.rotate);
+  for (const content of contents) {
+    const label = `Ghost "${content.name}" ("${content.label}")`;
+    const own = skeletons.filter((skeleton) => skeleton.name === content.name);
+    const frames = own.flatMap((skeleton) =>
+      skeleton.frame ? [skeleton.frame] : [],
+    );
+    // Shown before, so it was measured: no placeholder.
+    expect.soft(frames.length, `${label}: skeletons`).toBe(own.length);
+    const [first] = frames;
+    if (!first) {
+      expect.soft(first, `${label}: skeleton missing`).toBeDefined();
+      continue;
     }
+
+    // A normal <Ghost>: one skeleton for all of its content.
+    if (!LISTS.has(content.name)) {
+      expect.soft(frames.length, `${label}: number of skeletons`).toBe(1);
+      expectFrameMatch(first, content.whole, label);
+      continue;
+    }
+
+    // A list: the first skeleton is the first item, box by box. In the
+    // playgrounds `count` matches the number of items.
+    expectFrameMatch(first, content.firstItem, `${label} (first item)`);
+    expect
+      .soft(frames.length, `${label}: number of skeletons`)
+      .toBe(content.items.length);
+    // The others repeat it. Where the real items have the same size too
+    // (cards in a grid), each skeleton must sit on its item.
+    const sameSize = content.items.every(
+      (item) =>
+        Math.abs(item.width - content.firstItem.width) <= TOLERANCE &&
+        Math.abs(item.height - content.firstItem.height) <= TOLERANCE,
+    );
+    for (const [index, frame] of frames.entries()) {
+      expectClose(
+        { ...frame, x: 0, y: 0 },
+        { ...first, x: 0, y: 0 },
+        `${label}: skeleton #${index} size`,
+      );
+      const item = content.items[index];
+      if (sameSize && item) {
+        expectClose(frame, item, `${label}: skeleton #${index} position`);
+      }
+    }
+  }
+}
+
+function expectFrameMatch(skeleton: Frame, content: Frame, label: string) {
+  expectClose(skeleton, content, `${label}: frame`);
+  expect
+    .soft(skeleton.boxes.length, `${label}: number of boxes`)
+    .toBe(content.boxes.length);
+  for (const [index, box] of content.boxes.entries()) {
+    const drawn = skeleton.boxes[index];
+    if (!drawn) continue;
+    expectClose(drawn, box, `${label}: box #${index}`);
+    expect
+      .soft(drawn.rotate, `${label}: box #${index} rotate`)
+      .toBe(box.rotate);
   }
 }
 
@@ -158,72 +220,90 @@ async function toggle(page: Page, label: string) {
   await page.waitForLoadState("networkidle");
 }
 
-// For each top-level <Ghost> inside `scope`: its content measured by
-// `ghostlyjs/core`, at its position in the page. `null` for a <Ghost> that
-// still shows a skeleton (one that is always loading).
-function measureContents(scope: Locator): Promise<(Frame | null)[]> {
-  return scope.evaluate((root, selector) => {
-    // Nested <Ghost>s belong to the skeleton of the outer one.
-    const ghosts = [...root.querySelectorAll(selector)].filter(
-      (element) => !element.parentElement?.closest(selector),
+// For each top-level <Ghost> inside `scope` that shows its content: the
+// content measured by `ghostlyjs/core`, in page coordinates (the page may
+// scroll between the two measurings, e.g. to click a button).
+function measureContents(scope: Locator): Promise<Content[]> {
+  return scope.evaluate((root, skeleton) => {
+    const wrappers = [...root.querySelectorAll("[data-ghost]")].filter(
+      (element) =>
+        !element.matches(skeleton) &&
+        // Nested <Ghost>s belong to the skeleton of the outer one.
+        !element.parentElement?.closest("[data-ghost]"),
     );
-    return ghosts.map((element) => {
-      if (!element.matches('[style="display: contents;"]')) return null;
-      const { measureElement, measureFrame } = window.ghostlyTest;
-      const { width, height, boxes } = measureElement(element);
-      // Page coordinates: the page may scroll between the two measurings
-      // (e.g. to click a button).
-      const viewport = measureFrame(element);
-      const frame = { x: viewport.x + scrollX, y: viewport.y + scrollY };
+    const { measureElement, measureFrame } = window.ghostlyTest;
+    const toPage = (rect: DOMRect) => ({
+      x: rect.x + scrollX,
+      y: rect.y + scrollY,
+      width: rect.width,
+      height: rect.height,
+    });
+    // A measurement with its boxes in page coordinates.
+    const measure = (element: Element, nodes: Node[], list: boolean) => {
+      const { width, height, boxes } = measureElement(element, { list });
+      const { x, y } = toPage(measureFrame(nodes));
       return {
-        label: (element.textContent ?? "").trim().slice(0, 30),
-        x: frame.x,
-        y: frame.y,
+        x,
+        y,
         width,
         height,
-        // Boxes in page coordinates, like the drawn ones below.
-        boxes: boxes.map((box) => ({
-          ...box,
-          x: frame.x + box.x,
-          y: frame.y + box.y,
-        })),
+        boxes: boxes.map((box) => ({ ...box, x: x + box.x, y: y + box.y })),
+      };
+    };
+
+    return wrappers.map((element) => {
+      const items = [...element.children];
+      return {
+        name: element.getAttribute("data-ghost") ?? "",
+        label: (element.textContent ?? "").trim().slice(0, 30),
+        whole: measure(element, [...element.childNodes], false),
+        firstItem: measure(element, items.slice(0, 1), true),
+        items: items.map((item) => toPage(item.getBoundingClientRect())),
       };
     });
-  }, GHOST);
+  }, SKELETON);
 }
 
 // The drawn skeletons inside `scope` and their boxes, in page coordinates.
-function measureSkeletons(scope: Locator): Promise<(Frame | null)[]> {
-  return scope.evaluate((root, selector) => {
-    return [...root.querySelectorAll(selector)].map((element) => {
-      if (!element.matches(".ghostly-skeleton")) return null;
-      const rect = element.getBoundingClientRect();
-      const frame = { x: rect.x + scrollX, y: rect.y + scrollY };
-      return {
-        label: "",
-        x: frame.x,
-        y: frame.y,
-        width: rect.width,
-        height: rect.height,
-        boxes: [...element.querySelectorAll<HTMLElement>(".ghostly-box")].map(
-          (box) => {
-            // The computed values ignore `transform`, so a rotated box keeps
-            // its real size. Unlike `offsetLeft` & co. they aren't rounded.
-            const style = getComputedStyle(box);
-            return {
-              x: frame.x + parseFloat(style.left),
-              y: frame.y + parseFloat(style.top),
-              width: parseFloat(style.width),
-              height: parseFloat(style.height),
-              rotate:
-                parseFloat(box.style.transform.replace("rotate(", "")) ||
-                undefined,
-            };
+function measureSkeletons(scope: Locator): Promise<Skeleton[]> {
+  return scope.evaluate(
+    (root, selector) =>
+      [...root.querySelectorAll(selector)].map((element) => {
+        const name = element.getAttribute("data-ghost") ?? "";
+        if (!element.matches(".ghostly-skeleton")) return { name, frame: null };
+        const rect = element.getBoundingClientRect();
+        const x = rect.x + scrollX;
+        const y = rect.y + scrollY;
+        const boxes = [
+          ...element.querySelectorAll<HTMLElement>(".ghostly-box"),
+        ];
+        return {
+          name,
+          frame: {
+            x,
+            y,
+            width: rect.width,
+            height: rect.height,
+            boxes: boxes.map((box) => {
+              // The computed values ignore `transform`, so a rotated box
+              // keeps its real size. Unlike `offsetLeft` & co. they aren't
+              // rounded.
+              const style = getComputedStyle(box);
+              return {
+                x: x + parseFloat(style.left),
+                y: y + parseFloat(style.top),
+                width: parseFloat(style.width),
+                height: parseFloat(style.height),
+                rotate:
+                  parseFloat(box.style.transform.replace("rotate(", "")) ||
+                  undefined,
+              };
+            }),
           },
-        ),
-      };
-    });
-  }, GHOST);
+        };
+      }),
+    SKELETON,
+  );
 }
 
 function expectClose(actual: Rect, expected: Rect, message: string) {

@@ -3,7 +3,7 @@
 
 import { afterEach, describe, expect, test } from "vitest";
 
-import { measureElement } from "./index";
+import { measureElement, type MeasureOptions } from "./index";
 
 // A 400px wide area at the top left of the page.
 const containerStyle =
@@ -20,12 +20,12 @@ container.style.cssText = containerStyle;
 
 // Renders `html` inside a wrapper with `display: contents`, like <Ghost>
 // does, and measures it.
-function measure(html: string) {
+function measure(html: string, options?: MeasureOptions) {
   const root = document.createElement("div");
   root.style.display = "contents";
   root.innerHTML = html;
   container.append(root);
-  return measureElement(root);
+  return measureElement(root, options);
 }
 
 describe("frame", () => {
@@ -275,6 +275,55 @@ describe("placement in the parent", () => {
       `<div style="width: 100px; height: 20px; ${style}"></div>`,
     );
     expect(result.flexShrink).toBe(flexShrink);
+  });
+});
+
+describe("lists", () => {
+  // Three cards in a column with a gap; the second one is taller.
+  const cards = `
+    <div style="height: 40px; background: red; border-radius: 8px">One</div>
+    <div style="height: 80px; background: red">Two</div>
+    <div style="height: 40px; background: red">Three</div>`;
+
+  test("only the first item is measured", () => {
+    container.style.cssText +=
+      "; display: flex; flex-direction: column; gap: 10px";
+    const result = measure(cards, { list: true });
+    expect(result).toMatchObject({ width: 400, height: 40 });
+    // The card and its text line, nothing of the other cards.
+    expect(result.boxes).toHaveLength(2);
+    expect(result.boxes[0]).toMatchObject({
+      x: 0,
+      y: 0,
+      height: 40,
+      radius: 8,
+    });
+  });
+
+  test("the items are counted", () => {
+    expect(measure(cards, { list: true }).count).toBe(3);
+  });
+
+  test("text between the items is not an item", () => {
+    const result = measure("Text <div>A</div> more text <div>B</div>", {
+      list: true,
+    });
+    expect(result.count).toBe(2);
+  });
+
+  test("an empty list has no frame and a count of 0", () => {
+    expect(measure("", { list: true })).toMatchObject({
+      width: 0,
+      height: 0,
+      boxes: [],
+      count: 0,
+    });
+  });
+
+  test("without `list`, everything is measured and there is no count", () => {
+    const result = measure(cards);
+    expect(result.height).toBe(160);
+    expect(result).not.toHaveProperty("count");
   });
 });
 

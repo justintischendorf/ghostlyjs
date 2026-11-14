@@ -1,5 +1,5 @@
 {
-  "async-client-0": {
+  "async-client-posts": {
     "width": 1088,
     "height": 94,
     "flexShrink": 1,
@@ -13,82 +13,20 @@
       },
       {
         "x": 21,
-        "y": 22.5,
+        "y": 22,
         "width": 102.6,
-        "height": 20.5,
+        "height": 21,
         "radius": 4
       },
       {
         "x": 21,
-        "y": 50.5,
+        "y": 50,
         "width": 636,
-        "height": 20.5,
+        "height": 21,
         "radius": 4
       }
-    ]
-  },
-  "async-client-1": {
-    "width": 1088,
-    "height": 94,
-    "flexShrink": 1,
-    "boxes": [
-      {
-        "x": 0,
-        "y": 0,
-        "width": 1088,
-        "height": 94,
-        "radius": 16
-      },
-      {
-        "x": 21,
-        "y": 22.5,
-        "width": 105.3,
-        "height": 20.5,
-        "radius": 4
-      },
-      {
-        "x": 21,
-        "y": 50.5,
-        "width": 92.6,
-        "height": 20.5,
-        "radius": 4
-      }
-    ]
-  },
-  "async-client-2": {
-    "width": 1088,
-    "height": 118,
-    "flexShrink": 1,
-    "boxes": [
-      {
-        "x": 0,
-        "y": 0,
-        "width": 1088,
-        "height": 118,
-        "radius": 16
-      },
-      {
-        "x": 21,
-        "y": 22.5,
-        "width": 86.2,
-        "height": 20.5,
-        "radius": 4
-      },
-      {
-        "x": 21,
-        "y": 50.5,
-        "width": 1044.4,
-        "height": 20.5,
-        "radius": 4
-      },
-      {
-        "x": 21,
-        "y": 74.5,
-        "width": 332.4,
-        "height": 20.5,
-        "radius": 4
-      }
-    ]
+    ],
+    "count": 3
   },
   "async-server": {
     "width": 1088,
@@ -111,9 +49,9 @@
       },
       {
         "x": 85,
-        "y": 28.5,
+        "y": 28,
         "width": 102.6,
-        "height": 20.5,
+        "height": 21,
         "radius": 4
       },
       {
@@ -125,9 +63,9 @@
       },
       {
         "x": 25,
-        "y": 90.5,
+        "y": 90,
         "width": 636,
-        "height": 20.5,
+        "height": 21,
         "radius": 4
       }
     ]
@@ -1616,7 +1554,7 @@
       },
       {
         "x": 32,
-        "y": 32.5,
+        "y": 32,
         "width": 180.9,
         "height": 31,
         "radius": 4
@@ -1630,9 +1568,9 @@
       },
       {
         "x": 32,
-        "y": 65.5,
+        "y": 65,
         "width": 255.6,
-        "height": 20.5,
+        "height": 21,
         "radius": 4
       }
     ]
@@ -1688,33 +1626,33 @@
         "x": 0,
         "y": 118,
         "width": 667.1,
-        "height": 23.5,
+        "height": 23,
         "radius": 4
       },
       {
         "x": 0,
         "y": 146,
         "width": 619.6,
-        "height": 23.5,
+        "height": 23,
         "radius": 4
       },
       {
         "x": 20,
-        "y": 204.5,
+        "y": 204,
         "width": 106.4,
-        "height": 20.5,
+        "height": 21,
         "radius": 4
       },
       {
         "x": 203.4,
-        "y": 204.5,
+        "y": 204,
         "width": 85.7,
-        "height": 20.5,
+        "height": 21,
         "radius": 4
       }
     ]
   },
-  "home-member-0": {
+  "home-members": {
     "width": 352,
     "height": 82,
     "flexShrink": 1,
@@ -1735,9 +1673,9 @@
       },
       {
         "x": 81,
-        "y": 20.5,
+        "y": 20,
         "width": 102.6,
-        "height": 20.5,
+        "height": 21,
         "radius": 4
       },
       {
@@ -1747,182 +1685,8 @@
         "height": 18,
         "radius": 4
       }
-    ]
-  },
-  "home-member-1": {
-    "width": 352,
-    "height": 82,
-    "flexShrink": 1,
-    "boxes": [
-      {
-        "x": 0,
-        "y": 0,
-        "width": 352,
-        "height": 82,
-        "radius": 16
-      },
-      {
-        "x": 17,
-        "y": 17,
-        "width": 48,
-        "height": 48,
-        "radius": 24
-      },
-      {
-        "x": 81,
-        "y": 20.5,
-        "width": 105.3,
-        "height": 20.5,
-        "radius": 4
-      },
-      {
-        "x": 81,
-        "y": 44,
-        "width": 49.3,
-        "height": 18,
-        "radius": 4
-      }
-    ]
-  },
-  "home-member-2": {
-    "width": 352,
-    "height": 82,
-    "flexShrink": 1,
-    "boxes": [
-      {
-        "x": 0,
-        "y": 0,
-        "width": 352,
-        "height": 82,
-        "radius": 16
-      },
-      {
-        "x": 17,
-        "y": 17,
-        "width": 48,
-        "height": 48,
-        "radius": 24
-      },
-      {
-        "x": 81,
-        "y": 20.5,
-        "width": 86.2,
-        "height": 20.5,
-        "radius": 4
-      },
-      {
-        "x": 81,
-        "y": 44,
-        "width": 94.4,
-        "height": 18,
-        "radius": 4
-      }
-    ]
-  },
-  "home-member-3": {
-    "width": 352,
-    "height": 82,
-    "flexShrink": 1,
-    "boxes": [
-      {
-        "x": 0,
-        "y": 0,
-        "width": 352,
-        "height": 82,
-        "radius": 16
-      },
-      {
-        "x": 17,
-        "y": 17,
-        "width": 48,
-        "height": 48,
-        "radius": 24
-      },
-      {
-        "x": 81,
-        "y": 20.5,
-        "width": 142.8,
-        "height": 20.5,
-        "radius": 4
-      },
-      {
-        "x": 81,
-        "y": 44,
-        "width": 98.3,
-        "height": 18,
-        "radius": 4
-      }
-    ]
-  },
-  "home-member-4": {
-    "width": 352,
-    "height": 82,
-    "flexShrink": 1,
-    "boxes": [
-      {
-        "x": 0,
-        "y": 0,
-        "width": 352,
-        "height": 82,
-        "radius": 16
-      },
-      {
-        "x": 17,
-        "y": 17,
-        "width": 48,
-        "height": 48,
-        "radius": 24
-      },
-      {
-        "x": 81,
-        "y": 20.5,
-        "width": 109.6,
-        "height": 20.5,
-        "radius": 4
-      },
-      {
-        "x": 81,
-        "y": 44,
-        "width": 68.3,
-        "height": 18,
-        "radius": 4
-      }
-    ]
-  },
-  "home-member-5": {
-    "width": 352,
-    "height": 82,
-    "flexShrink": 1,
-    "boxes": [
-      {
-        "x": 0,
-        "y": 0,
-        "width": 352,
-        "height": 82,
-        "radius": 16
-      },
-      {
-        "x": 17,
-        "y": 17,
-        "width": 48,
-        "height": 48,
-        "radius": 24
-      },
-      {
-        "x": 81,
-        "y": 20.5,
-        "width": 143.3,
-        "height": 20.5,
-        "radius": 4
-      },
-      {
-        "x": 81,
-        "y": 44,
-        "width": 94.4,
-        "height": 18,
-        "radius": 4
-      }
-    ]
+    ],
+    "count": 6
   },
   "layout-article": {
     "width": 557,
