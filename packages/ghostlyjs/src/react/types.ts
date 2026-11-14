@@ -4,9 +4,6 @@ import type { ReactNode } from "react";
 
 import type { GhostlyData } from "../core/types";
 
-// Skeleton shape, chosen by the user via the `variant` prop.
-export type GhostVariant = "default" | "block" | "text" | "circle";
-
 // Props for the <Ghost> component.
 export type GhostProps = {
   // The real content, shown once loading is done.
@@ -15,8 +12,6 @@ export type GhostProps = {
   name: string;
   // Shows the skeleton while true.
   isLoading: boolean;
-  // Skeleton shape; falls back to "default".
-  variant?: GhostVariant;
 };
 
 // Props for the <GhostlyProvider> component.

@@ -1,3 +1,7 @@
 {
-  "avatar": { "width": 120, "height": 120 }
+  "avatar": {
+    "width": 120,
+    "height": 120,
+    "boxes": [{ "x": 0, "y": 0, "width": 120, "height": 120, "radius": 60 }]
+  }
 }
