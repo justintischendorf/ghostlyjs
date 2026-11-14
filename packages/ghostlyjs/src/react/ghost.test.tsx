@@ -269,3 +269,109 @@ describe("measuring in dev mode", () => {
     expect(fetch).toHaveBeenCalledTimes(3);
   });
 });
+
+describe("lists (count)", () => {
+  // Three cards; the <Ghost> sits inside the list's container.
+  const items = ["One", "Two", "Three"].map((text) => (
+    <div key={text} style={{ height: 40, background: "red" }}>
+      {text}
+    </div>
+  ));
+  const list = (isLoading: boolean, count: number | true, data = {}) => (
+    <GhostlyProvider data={data}>
+      <div
+        className="list"
+        style={{ display: "flex", flexDirection: "column", gap: 10 }}
+      >
+        <Ghost name="items" isLoading={isLoading} count={count}>
+          {items}
+        </Ghost>
+      </div>
+    </GhostlyProvider>
+  );
+  const item = { width: 400, height: 40, boxes: [], count: 3 };
+
+  test("shows the measured item `count` times", async () => {
+    mockCollector(true);
+    const { container } = await render(list(true, 5, { items: item }));
+    expect(container.querySelectorAll(".ghostly-skeleton")).toHaveLength(5);
+  });
+
+  test("`count` alone shows as many as were measured", async () => {
+    mockCollector(true);
+    const { container } = await render(list(true, true, { items: item }));
+    expect(container.querySelectorAll(".ghostly-skeleton")).toHaveLength(3);
+  });
+
+  test("the skeletons are items of the list, so its gap applies", async () => {
+    mockCollector(true);
+    const { container } = await render(list(true, 3, { items: item }));
+    const skeletons = [
+      ...container.querySelectorAll<HTMLElement>(".ghostly-skeleton"),
+    ];
+    expect(skeletons.every((s) => s.parentElement?.className === "list")).toBe(
+      true,
+    );
+    const [first, second] = skeletons.map((s) => s.getBoundingClientRect());
+    expect(second!.top - first!.bottom).toBe(10);
+  });
+
+  test("without a measurement, one placeholder per item", async () => {
+    mockCollector(true);
+    const { container } = await render(list(true, 4));
+    expect(container.querySelectorAll(".ghostly-placeholder")).toHaveLength(4);
+  });
+
+  test("an empty list when measured still shows one skeleton", async () => {
+    mockCollector(true);
+    const data = { items: { ...item, count: 0 } };
+    const { container } = await render(list(true, true, data));
+    expect(container.querySelectorAll(".ghostly-skeleton")).toHaveLength(1);
+  });
+
+  test("measures the first item and sends the count", async () => {
+    const fetch = mockCollector(true);
+    const { container, rerender } = await render(list(false, true));
+    await flush();
+
+    const sent = JSON.parse(
+      (fetch.mock.calls.at(-1) as unknown as [string, RequestInit])[1]
+        .body as string,
+    );
+    expect(sent.name).toBe("items");
+    expect(sent.measurement).toMatchObject({ height: 40, count: 3 });
+
+    // The fresh measurement is used right away.
+    await rerender(list(true, true));
+    const skeletons = container.querySelectorAll(".ghostly-skeleton");
+    expect(skeletons).toHaveLength(3);
+    expect(skeletons[0]?.getBoundingClientRect().height).toBe(40);
+  });
+});
+
+describe("data-ghost", () => {
+  test("marks the content, the skeleton and the placeholder", async () => {
+    mockCollector(true);
+    const ui = (isLoading: boolean, data: GhostlyData) => (
+      <GhostlyProvider data={data}>
+        <Ghost name="a" isLoading={isLoading}>
+          {content}
+        </Ghost>
+      </GhostlyProvider>
+    );
+    const { container, rerender } = await render(ui(true, {}));
+    expect(
+      container
+        .querySelector(".ghostly-placeholder")
+        ?.getAttribute("data-ghost"),
+    ).toBe("a");
+    await rerender(ui(true, { a: card }));
+    expect(
+      container.querySelector(".ghostly-skeleton")?.getAttribute("data-ghost"),
+    ).toBe("a");
+    await rerender(ui(false, { a: card }));
+    expect(container.querySelector('[data-ghost="a"]')?.textContent).toBe(
+      "Content",
+    );
+  });
+});

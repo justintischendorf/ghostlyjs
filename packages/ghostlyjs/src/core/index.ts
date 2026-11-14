@@ -1,6 +1,10 @@
 // Public entry of `ghostlyjs/core`: types and measuring.
 
-import type { GhostBoxContent, GhostBoxMeasurement } from "./types";
+import type {
+  GhostBoxContent,
+  GhostBoxMeasurement,
+  MeasureOptions,
+} from "./types";
 
 // Default port of the `ghostly dev` collector.
 export const DEFAULT_PORT = 6767;
@@ -9,6 +13,7 @@ export type {
   GhostBoxContent,
   GhostlyData,
   GhostBoxMeasurement,
+  MeasureOptions,
 } from "./types";
 
 // Elements measured as one box. Their insides (paths, <source>, <option>,
@@ -34,8 +39,16 @@ const SMALL_RADIUS = 4;
 
 // `root` is the <Ghost> wrapper. It has `display: contents` and no box of
 // its own, so the frame is measured from its children.
-export function measureElement(root: Element): GhostBoxMeasurement {
-  const frame = measureFrame(root);
+// With `list`, the children are the items of a list: only the first one is
+// measured, the skeleton repeats it.
+export function measureElement(
+  root: Element,
+  options: MeasureOptions = {},
+): GhostBoxMeasurement {
+  const children = [...childNodesOf(root)];
+  const items = children.filter((node) => node instanceof Element);
+  const nodes = options.list ? items.slice(0, 1) : children;
+  const frame = measureFrame(nodes);
   const boxes: GhostBoxContent[] = [];
   const lines: GhostBoxContent[] = [];
 
@@ -98,8 +111,8 @@ export function measureElement(root: Element): GhostBoxMeasurement {
     }
   }
 
-  function measure(parent: Node, clip: DOMRect | undefined): void {
-    for (const node of childNodesOf(parent)) {
+  function measure(nodes: Iterable<Node>, clip: DOMRect | undefined): void {
+    for (const node of nodes) {
       if (node instanceof Text) {
         if (!node.textContent?.trim()) continue;
         for (const rect of rangeOf(node).getClientRects()) {
@@ -129,27 +142,31 @@ export function measureElement(root: Element): GhostBoxMeasurement {
         // as just the circle; a text bar inside it looks odd.
         if (isCircle(node, style)) continue;
       }
-      measure(node, clipOf(node, style, clip));
+      measure(childNodesOf(node), clipOf(node, style, clip));
     }
   }
 
-  measure(root, undefined);
+  measure(nodes, undefined);
 
+  const first = items[0];
   return {
     width: round(frame.width),
     height: round(frame.height),
-    flexShrink: root.firstElementChild
-      ? parseFloat(getComputedStyle(root.firstElementChild).flexShrink)
+    flexShrink: first
+      ? parseFloat(getComputedStyle(first).flexShrink)
       : undefined,
     align: alignmentOf(root, frame),
     boxes: [...boxes, ...mergeLines(lines)],
+    // How many items the list had, for <Ghost count>.
+    ...(options.list && { count: items.length }),
   };
 }
 
-// The rectangle around all direct children of `root`. Element boxes, not
-// their content, so overflowing content doesn't count.
-function measureFrame(root: Element): DOMRect {
-  const rects = [...childNodesOf(root)]
+// The rectangle around `nodes` (the direct children of the <Ghost>
+// wrapper). Element boxes, not their content, so overflowing content
+// doesn't count.
+function measureFrame(nodes: Node[]): DOMRect {
+  const rects = nodes
     .flatMap((node) => {
       if (node instanceof Text) return [textRect(node)];
       if (!(node instanceof Element)) return [];

@@ -44,15 +44,14 @@ export default function Home() {
       <section className="flex flex-col gap-4">
         <h2 className="text-xl font-semibold">Team</h2>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {members.map((member, index) => (
-            <Ghost
-              key={member.name}
-              name={`home-member-${index}`}
-              isLoading={isLoading}
-            >
-              <MemberCard {...member} />
-            </Ghost>
-          ))}
+          {/* One Ghost for the whole list: the first card is measured and
+              repeated as often as there were cards. The skeletons are
+              items of this grid, so its columns and gap apply. */}
+          <Ghost name="home-members" isLoading={isLoading} count>
+            {members.map((member) => (
+              <MemberCard key={member.name} {...member} />
+            ))}
+          </Ghost>
         </div>
       </section>
 

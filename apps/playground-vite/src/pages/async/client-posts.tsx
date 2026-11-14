@@ -5,30 +5,40 @@ import { useEffect, useState } from "react";
 import { posts } from "../../lib/data";
 
 // The usual client pattern: start loading, show skeletons, show content.
+// Like after a real request, there are no posts while loading. So the
+// skeletons can't come from `posts.map`; `count` repeats the measured post.
 export default function ClientPosts() {
+  const [loaded, setLoaded] = useState<typeof posts>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [round, setRound] = useState(0);
 
   useEffect(() => {
-    const timer = setTimeout(() => setIsLoading(false), 1500);
+    const timer = setTimeout(() => {
+      setLoaded(posts);
+      setIsLoading(false);
+    }, 1500);
     return () => clearTimeout(timer);
   }, [round]);
 
   function reload() {
+    setLoaded([]);
     setIsLoading(true);
     setRound((value) => value + 1);
   }
 
   return (
     <div className="flex flex-col gap-3">
-      {posts.map((post, index) => (
-        <Ghost key={index} name={`async-client-${index}`} isLoading={isLoading}>
-          <div className="flex flex-col gap-1 rounded-2xl border border-border p-5">
+      <Ghost name="async-client-posts" isLoading={isLoading} count={3}>
+        {loaded.map((post) => (
+          <div
+            key={post.author}
+            className="flex flex-col gap-1 rounded-2xl border border-border p-5"
+          >
             <p className="font-semibold">{post.author}</p>
             <p className="text-muted">{post.text}</p>
           </div>
-        </Ghost>
-      ))}
+        ))}
+      </Ghost>
       <button
         type="button"
         onClick={reload}

@@ -7,8 +7,14 @@ import type { GhostProps } from "./types";
 
 // <Ghost> renders its children when `isLoading` is false, otherwise a
 // skeleton built from the measurement stored under its `name`.
-export function Ghost({ children, name, isLoading }: GhostProps): ReactNode {
+export function Ghost({
+  children,
+  name,
+  isLoading,
+  count,
+}: GhostProps): ReactNode {
   const stored = useGhostlyData()[name];
+  const isList = count !== undefined;
   const [measured, setMeasured] = useState<GhostBoxMeasurement>();
   const ref = useRef<HTMLDivElement>(null);
 
@@ -18,21 +24,31 @@ export function Ghost({ children, name, isLoading }: GhostProps): ReactNode {
     if (isLoading || !ref.current) return;
     if (process.env.NODE_ENV !== "development") return;
 
-    const measurement = measureElement(ref.current);
+    const measurement = measureElement(ref.current, { list: isList });
     setMeasured(measurement);
     sendToCollector(JSON.stringify({ name, measurement }));
-  }, [isLoading, name]);
+  }, [isLoading, name, isList]);
 
   if (!isLoading) {
     // `display: contents` keeps the parent's flex/grid layout intact.
+    // `data-ghost` shows in the browser's dev tools which <Ghost> it is.
     return (
-      <div ref={ref} style={{ display: "contents" }}>
+      <div ref={ref} data-ghost={name} style={{ display: "contents" }}>
         {children}
       </div>
     );
   }
   // A fresh measurement wins; otherwise the stored one from the provider.
-  return <GhostSkeleton measurement={measured ?? stored} />;
+  const measurement = measured ?? stored;
+  if (!isList) return <GhostSkeleton name={name} measurement={measurement} />;
+
+  // A list: one skeleton per item, side by side in the list's container, so
+  // its gap and grid place them like the real items. At least one, so an
+  // empty list when measured still shows that something loads.
+  const times = Math.max(1, count === true ? (measurement?.count ?? 1) : count);
+  return Array.from({ length: times }, (_, index) => (
+    <GhostSkeleton key={index} name={name} measurement={measurement} />
+  ));
 }
 
 // Whether `ghostly dev` answered the first request of this page load.
@@ -61,14 +77,16 @@ function sendToCollector(body: string): void {
 }
 
 function GhostSkeleton({
+  name,
   measurement,
 }: {
+  name: string;
   measurement?: GhostBoxMeasurement;
 }): ReactNode {
   // Never measured yet: one bar, so the user still sees that something
   // loads. It is replaced once the real content was shown in dev.
   if (!measurement) {
-    return <div className="ghostly-placeholder" />;
+    return <div className="ghostly-placeholder" data-ghost={name} />;
   }
   const { width } = measurement;
   const percent = (px: number) => `${(px / width) * 100}%`;
@@ -81,6 +99,7 @@ function GhostSkeleton({
     // width and its neighbours get the rest.
     <div
       className="ghostly-skeleton"
+      data-ghost={name}
       style={{
         width: "100%",
         maxWidth: width,

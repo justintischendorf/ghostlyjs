@@ -15,6 +15,13 @@ and this project adheres to
   ([#14], [#15])
 - `<GhostlyProvider>` passes the measurements from `ghostly.json` to every
   `<Ghost>` in the app. ([#14])
+- `count` prop on `<Ghost>` for lists: only the first item is measured and
+  the skeleton repeats it `count` times, or as often as there were items
+  when measured (`count` without a value). Works while the data is still
+  missing, and the list's gap and grid apply to the skeletons. The
+  playgrounds use it for the team grid and the posts that load for real.
+- `data-ghost` attribute with the name on the content wrapper and the
+  skeletons, to find a `<Ghost>` in the browser's dev tools.
 - Measuring in dev mode: `<Ghost>` measures the real rendered content (text
   lines, surfaces, images, icons, form controls, Shadow DOM) instead of
   using predefined variants. Production builds don't measure. ([#15])

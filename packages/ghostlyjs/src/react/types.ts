@@ -12,6 +12,11 @@ export type GhostProps = {
   name: string;
   // Shows the skeleton while true.
   isLoading: boolean;
+  // For lists: the children are the items. Only the first item is measured,
+  // and the skeleton shows it `count` times. `true` (just `count`) shows as
+  // many as there were when measured. Put the <Ghost> inside the list's
+  // container, so its gap and grid apply to the skeletons too.
+  count?: number | true;
 };
 
 // Props for the <GhostlyProvider> component.
