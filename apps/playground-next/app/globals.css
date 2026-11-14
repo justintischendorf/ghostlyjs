@@ -6,9 +6,8 @@
   --muted: #6b6b6b;
   --card: #f5f5f5;
   --border: #e3e3e3;
-  --accent: #7c3aed;
-  --accent-2: #06b6d4;
-  --on-accent: #ffffff;
+  --accent: #a78bfa;
+  --on-accent: #0a0a0a;
   --success: #16a34a;
   --warning: #d97706;
   --danger: #dc2626;
@@ -21,9 +20,6 @@
     --muted: #9a9a9a;
     --card: #171717;
     --border: #2a2a2a;
-    --accent: #a78bfa;
-    --accent-2: #22d3ee;
-    --on-accent: #0a0a0a;
     --success: #4ade80;
     --warning: #fbbf24;
     --danger: #f87171;
@@ -37,7 +33,6 @@
   --color-card: var(--card);
   --color-border: var(--border);
   --color-accent: var(--accent);
-  --color-accent-2: var(--accent-2);
   --color-on-accent: var(--on-accent);
   --color-success: var(--success);
   --color-warning: var(--warning);
@@ -49,4 +44,12 @@
 body {
   background: var(--background);
   color: var(--foreground);
+  /* Checkboxes, radios and sliders in the accent color instead of the
+     browser's blue. */
+  accent-color: var(--accent);
+}
+
+/* The focus ring of inputs and buttons, also blue by default. */
+:focus-visible {
+  outline-color: var(--accent);
 }

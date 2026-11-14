@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none">
+  <title>Ghostly</title>
+  <!-- Body: a dome with a wavy hem -->
+  <path
+    d="M24 64a40 40 0 0 1 80 0v44a8 8 0 0 1-16 0 8 8 0 0 0-16 0 8 8 0 0 1-16 0 8 8 0 0 0-16 0 8 8 0 0 1-16 0z"
+    fill="#a78bfa"
+  />
+  <!-- Face made of skeleton bars: two eyes and a text line -->
+  <rect x="44" y="50" width="12" height="18" rx="6" fill="#0a0a0a"/>
+  <rect x="72" y="50" width="12" height="18" rx="6" fill="#0a0a0a"/>
+  <rect x="44" y="80" width="40" height="8" rx="4" fill="#0a0a0a" fill-opacity="0.35"/>
+</svg>

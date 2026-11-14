@@ -5,6 +5,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
 import "./globals.css";
+import logo from "../../../assets/logo.svg";
 import data from "../ghostly.json";
 
 const geistSans = Geist({
@@ -21,6 +22,8 @@ export const metadata: Metadata = {
   title: "Playground for Ghostly",
   description:
     "A playground for the Ghostly library, demonstrating its usage in a Next.js application.",
+  // The repo logo as favicon.
+  icons: { icon: logo.src },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
