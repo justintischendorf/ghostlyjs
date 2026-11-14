@@ -15,14 +15,14 @@ export default function Home() {
           <h1 className="sm:text-4xl text-2xl font-bold">
             Playground for Ghostly
           </h1>
-          <Ghost name="avatar" isLoading={isLoading} variant="circle">
+          <Ghost name="avatar" isLoading={isLoading}>
             <div className="h-20 w-20 sm:w-30 sm:h-30 rounded-full bg-accent shrink-0"></div>
           </Ghost>
         </div>
         <div className="w-full h-0.5 bg-accent rounded-full"></div>
       </div>
       <div className="flex sm:flex-row flex-col sm:flex-1 gap-6">
-        <Ghost name="heading" isLoading={isLoading} variant="text">
+        <Ghost name="heading" isLoading={isLoading}>
           <div className="flex flex-col gap-5 border border-accent/50 sm:p-10 p-5 rounded-3xl sm:flex-1">
             <h1 className="sm:text-2xl text-xl font-bold">Heading</h1>
             <p className="sm:text-lg text-base">
@@ -54,7 +54,7 @@ export default function Home() {
           ))}
         </div>
       </div>
-      <Ghost name="footer" isLoading={isLoading} variant="block">
+      <Ghost name="footer" isLoading={isLoading}>
         <div className="w-full border border-accent/50 rounded-2xl border-dashed h-40"></div>
       </Ghost>
       <button
