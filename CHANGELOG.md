@@ -31,6 +31,8 @@ and this project adheres to
 - Logo. ([#20])
 - Next.js playground with pages for common layouts, real async loading,
   edge cases and a light/dark toggle. ([#14], [#18], [#20], [#21])
+- Vite playground with the same pages on React 18.0.0, the oldest React
+  the package supports.
 - Linting and formatting with oxlint and oxfmt, CI checks, PR template and
   Dependabot. ([#4], [#5], [#9], [#11])
 - MIT license and security policy. ([#7], [#12])
