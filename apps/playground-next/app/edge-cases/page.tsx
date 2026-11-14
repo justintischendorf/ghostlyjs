@@ -141,11 +141,11 @@ const cases: {
     ),
   },
   {
-    name: "gradient",
-    title: "Gradient background",
+    name: "background-image",
+    title: "Background image",
     content: (
-      <div className="flex h-20 items-center justify-center rounded-2xl bg-linear-to-r from-accent to-accent-2 font-bold text-on-accent">
-        Gradient
+      <div className="flex h-20 items-center justify-center rounded-2xl bg-[url(/cover.svg)] bg-cover bg-center font-bold text-on-accent">
+        Background
       </div>
     ),
   },
@@ -190,7 +190,7 @@ const cases: {
     content: (
       <div className="relative size-16">
         <div className="size-16 rounded-full bg-accent" />
-        <span className="absolute -top-1 -right-1 flex size-6 items-center justify-center rounded-full bg-danger text-xs text-on-accent">
+        <span className="absolute -top-1 -right-1 flex size-6 items-center justify-center rounded-full bg-danger text-xs text-background">
           3
         </span>
       </div>

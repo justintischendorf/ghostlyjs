@@ -58,7 +58,7 @@ export default function Home() {
       </section>
 
       <Ghost name="home-cta" isLoading={isLoading}>
-        <section className="flex flex-col items-start gap-4 rounded-3xl bg-linear-to-br from-accent to-accent-2 p-8 text-on-accent sm:flex-row sm:items-center sm:justify-between">
+        <section className="flex flex-col items-start gap-4 rounded-3xl bg-accent p-8 text-on-accent sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-2xl font-bold">Ready to try it?</h2>
             <p className="text-on-accent/80">

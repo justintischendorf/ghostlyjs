@@ -7,7 +7,7 @@ type MemberCardProps = {
 export default function MemberCard({ name, role, initials }: MemberCardProps) {
   return (
     <div className="flex items-center gap-4 rounded-2xl border border-border bg-card p-4">
-      <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-accent font-bold text-background">
+      <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-accent font-bold text-on-accent">
         {initials}
       </div>
       <div className="flex flex-col">

@@ -1,9 +1,11 @@
 "use client";
 
-import { Ghost } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+// The repo logo, shared with the README (no copy in public/).
+import logo from "../../../assets/logo.svg";
 import { LoadingToggle } from "./loading";
 
 const links = [
@@ -23,7 +25,7 @@ export default function Nav() {
     <header className="sticky top-0 z-10 border-b border-border bg-background/80 backdrop-blur">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 sm:px-8">
         <Link href="/" className="flex items-center gap-2 font-bold">
-          <Ghost className="size-5" />
+          <Image src={logo} alt="" className="size-6" />
           Ghostly
         </Link>
         <nav className="order-last flex w-full gap-1 overflow-x-auto sm:order-none sm:w-auto">
