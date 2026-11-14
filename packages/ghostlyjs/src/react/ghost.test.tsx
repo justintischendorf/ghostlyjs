@@ -10,7 +10,14 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 
 import type { GhostlyData } from "../core/types";
 import { Ghost, GhostlyProvider } from "./index";
-import { card, cleanup, flush, mockCollector, render } from "./test-utils";
+import {
+  card,
+  cleanup,
+  everywhere,
+  flush,
+  mockCollector,
+  render,
+} from "./test-utils";
 
 afterEach(() => {
   cleanup();
@@ -71,7 +78,7 @@ describe("skeleton", () => {
 
   test("draws the measurement from the provider", async () => {
     const { container } = await render(
-      <GhostlyProvider data={{ card }}>
+      <GhostlyProvider data={{ card: everywhere(card) }}>
         <Ghost name="card" isLoading>
           {content}
         </Ghost>
@@ -87,8 +94,8 @@ describe("skeleton", () => {
 
   test("uses the measurement stored under its own name", async () => {
     const data: GhostlyData = {
-      other: { width: 50, height: 10, boxes: [] },
-      card,
+      other: everywhere({ width: 50, height: 10, boxes: [] }),
+      card: everywhere(card),
     };
     const { container } = await render(
       <GhostlyProvider data={data}>
@@ -103,7 +110,7 @@ describe("skeleton", () => {
 
   test("places each box like the measurement", async () => {
     const { container } = await render(
-      <GhostlyProvider data={{ card }}>
+      <GhostlyProvider data={{ card: everywhere(card) }}>
         <Ghost name="card" isLoading>
           {content}
         </Ghost>
@@ -126,7 +133,7 @@ describe("skeleton", () => {
 
   test("shrinks with a narrower parent instead of overlapping", async () => {
     const { container } = await render(
-      <GhostlyProvider data={{ card }}>
+      <GhostlyProvider data={{ card: everywhere(card) }}>
         <Ghost name="card" isLoading>
           {content}
         </Ghost>
@@ -147,7 +154,7 @@ describe("skeleton", () => {
     [undefined, "", ""],
   ])("align %s → margins %s / %s", async (align, left, right) => {
     const { container } = await render(
-      <GhostlyProvider data={{ card: { ...card, align } }}>
+      <GhostlyProvider data={{ card: everywhere({ ...card, align }) }}>
         <Ghost name="card" isLoading>
           {content}
         </Ghost>
@@ -160,7 +167,7 @@ describe("skeleton", () => {
 
   test("keeps the measured flex-shrink", async () => {
     const { container } = await render(
-      <GhostlyProvider data={{ card: { ...card, flexShrink: 0 } }}>
+      <GhostlyProvider data={{ card: everywhere({ ...card, flexShrink: 0 }) }}>
         <Ghost name="card" isLoading>
           {content}
         </Ghost>
@@ -194,7 +201,7 @@ describe("measuring in dev mode", () => {
     mockCollector(true);
     const stored = { width: 10, height: 10, boxes: [] };
     const ui = (isLoading: boolean) => (
-      <GhostlyProvider data={{ a: stored }}>
+      <GhostlyProvider data={{ a: everywhere(stored) }}>
         <Ghost name="a" isLoading={isLoading}>
           {content}
         </Ghost>
@@ -225,6 +232,8 @@ describe("measuring in dev mode", () => {
     expect(init.method).toBe("PATCH");
     expect(JSON.parse(init.body as string)).toEqual({
       name: "a",
+      // Vitest's window is 414px wide: below Tailwind's `sm`.
+      breakpoint: "base",
       measurement: expect.objectContaining({ width: 300, height: 50 }),
     });
   });
@@ -293,19 +302,25 @@ describe("lists (count)", () => {
 
   test("shows the measured item `count` times", async () => {
     mockCollector(true);
-    const { container } = await render(list(true, 5, { items: item }));
+    const { container } = await render(
+      list(true, 5, { items: everywhere(item) }),
+    );
     expect(container.querySelectorAll(".ghostly-skeleton")).toHaveLength(5);
   });
 
   test("`count` alone shows as many as were measured", async () => {
     mockCollector(true);
-    const { container } = await render(list(true, true, { items: item }));
+    const { container } = await render(
+      list(true, true, { items: everywhere(item) }),
+    );
     expect(container.querySelectorAll(".ghostly-skeleton")).toHaveLength(3);
   });
 
   test("the skeletons are items of the list, so its gap applies", async () => {
     mockCollector(true);
-    const { container } = await render(list(true, 3, { items: item }));
+    const { container } = await render(
+      list(true, 3, { items: everywhere(item) }),
+    );
     const skeletons = [
       ...container.querySelectorAll<HTMLElement>(".ghostly-skeleton"),
     ];
@@ -324,7 +339,7 @@ describe("lists (count)", () => {
 
   test("an empty list when measured still shows one skeleton", async () => {
     mockCollector(true);
-    const data = { items: { ...item, count: 0 } };
+    const data = { items: everywhere({ ...item, count: 0 }) };
     const { container } = await render(list(true, true, data));
     expect(container.querySelectorAll(".ghostly-skeleton")).toHaveLength(1);
   });
@@ -365,11 +380,11 @@ describe("data-ghost", () => {
         .querySelector(".ghostly-placeholder")
         ?.getAttribute("data-ghost"),
     ).toBe("a");
-    await rerender(ui(true, { a: card }));
+    await rerender(ui(true, { a: everywhere(card) }));
     expect(
       container.querySelector(".ghostly-skeleton")?.getAttribute("data-ghost"),
     ).toBe("a");
-    await rerender(ui(false, { a: card }));
+    await rerender(ui(false, { a: everywhere(card) }));
     expect(container.querySelector('[data-ghost="a"]')?.textContent).toBe(
       "Content",
     );

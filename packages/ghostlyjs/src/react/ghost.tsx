@@ -1,8 +1,14 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 import { DEFAULT_PORT, measureElement } from "../core";
-import type { GhostBoxMeasurement } from "../core/types";
-import { useGhostlyData } from "./ghostly-provider";
+import {
+  breakpointOf,
+  hideClass,
+  rangesOf,
+  variantsOf,
+} from "../core/breakpoints";
+import type { GhostBoxMeasurement, GhostlyEntry } from "../core/types";
+import { useGhostly } from "./ghostly-provider";
 import type { GhostProps } from "./types";
 
 // <Ghost> renders its children when `isLoading` is false, otherwise a
@@ -13,9 +19,10 @@ export function Ghost({
   isLoading,
   count,
 }: GhostProps): ReactNode {
-  const stored = useGhostlyData()[name];
+  const { data, breakpoints } = useGhostly();
   const isList = count !== undefined;
-  const [measured, setMeasured] = useState<GhostBoxMeasurement>();
+  // Fresh measurements of this page load, per breakpoint.
+  const [measured, setMeasured] = useState<GhostlyEntry>({});
   const ref = useRef<HTMLDivElement>(null);
 
   // Dev only: measure the real content after React rendered it and before
@@ -25,9 +32,11 @@ export function Ghost({
     if (process.env.NODE_ENV !== "development") return;
 
     const measurement = measureElement(ref.current, { list: isList });
-    setMeasured(measurement);
-    sendToCollector(JSON.stringify({ name, measurement }));
-  }, [isLoading, name, isList]);
+    // `innerWidth` includes the scrollbar, like the width media queries see.
+    const breakpoint = breakpointOf(window.innerWidth, breakpoints);
+    setMeasured((previous) => ({ ...previous, [breakpoint]: measurement }));
+    sendToCollector(JSON.stringify({ name, breakpoint, measurement }));
+  }, [isLoading, name, isList, breakpoints]);
 
   if (!isLoading) {
     // `display: contents` keeps the parent's flex/grid layout intact.
@@ -38,17 +47,47 @@ export function Ghost({
       </div>
     );
   }
-  // A fresh measurement wins; otherwise the stored one from the provider.
-  const measurement = measured ?? stored;
-  if (!isList) return <GhostSkeleton name={name} measurement={measurement} />;
+  // Fresh measurements win over the stored ones from the provider.
+  const entry = { ...data[name], ...measured };
+  const variants = variantsOf(entry, breakpoints);
+  // Never measured: no variant, one placeholder (per list item).
+  if (variants.length === 0) {
+    return repeat(isList ? count : 1, undefined, (key) => (
+      <GhostSkeleton key={key} name={name} />
+    ));
+  }
 
+  // One skeleton per variant, each hidden by CSS outside its breakpoints.
   // A list: one skeleton per item, side by side in the list's container, so
-  // its gap and grid place them like the real items. At least one, so an
-  // empty list when measured still shows that something loads.
-  const times = Math.max(1, count === true ? (measurement?.count ?? 1) : count);
-  return Array.from({ length: times }, (_, index) => (
-    <GhostSkeleton key={index} name={name} measurement={measurement} />
-  ));
+  // its gap and grid place them like the real items.
+  const ranges = rangesOf(breakpoints);
+  return variants.flatMap(({ measurement, ranges: shown }) => {
+    const hidden = ranges
+      .map((_, index) => index)
+      .filter((index) => !shown.includes(index))
+      .map(hideClass)
+      .join(" ");
+    return repeat(isList ? count : 1, measurement, (key) => (
+      <GhostSkeleton
+        key={`${shown[0]}-${key}`}
+        name={name}
+        measurement={measurement}
+        className={hidden}
+      />
+    ));
+  });
+}
+
+// Renders `count` items: a number, or `true` for as many as measured. At
+// least one, so an empty list when measured still shows that something
+// loads.
+function repeat(
+  count: number | true | undefined,
+  measurement: GhostBoxMeasurement | undefined,
+  render: (key: number) => ReactNode,
+): ReactNode[] {
+  const times = count === true ? (measurement?.count ?? 1) : (count ?? 1);
+  return Array.from({ length: Math.max(1, times) }, (_, key) => render(key));
 }
 
 // Whether `ghostly dev` answered the first request of this page load.
@@ -79,9 +118,12 @@ function sendToCollector(body: string): void {
 function GhostSkeleton({
   name,
   measurement,
+  className = "",
 }: {
   name: string;
   measurement?: GhostBoxMeasurement;
+  // Hides it outside its breakpoints.
+  className?: string;
 }): ReactNode {
   // Never measured yet: one bar, so the user still sees that something
   // loads. It is replaced once the real content was shown in dev.
@@ -98,7 +140,7 @@ function GhostSkeleton({
     // the real content takes as much as it needs), so it keeps the measured
     // width and its neighbours get the rest.
     <div
-      className="ghostly-skeleton"
+      className={`ghostly-skeleton ${className}`.trim()}
       data-ghost={name}
       style={{
         width: "100%",

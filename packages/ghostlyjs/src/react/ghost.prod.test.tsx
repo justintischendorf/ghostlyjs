@@ -4,7 +4,14 @@
 import { afterEach, expect, test, vi } from "vitest";
 
 import { Ghost, GhostlyProvider } from "./index";
-import { card, cleanup, flush, mockCollector, render } from "./test-utils";
+import {
+  card,
+  cleanup,
+  everywhere,
+  flush,
+  mockCollector,
+  render,
+} from "./test-utils";
 
 afterEach(() => {
   cleanup();
@@ -27,7 +34,7 @@ test("doesn't send measurements", async () => {
 test("keeps the stored measurement after the content was shown", async () => {
   mockCollector(true);
   const ui = (isLoading: boolean) => (
-    <GhostlyProvider data={{ card }}>
+    <GhostlyProvider data={{ card: everywhere(card) }}>
       <Ghost name="card" isLoading={isLoading}>
         {content}
       </Ghost>

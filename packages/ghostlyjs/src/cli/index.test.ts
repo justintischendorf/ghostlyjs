@@ -101,8 +101,8 @@ function send(
   });
 }
 
-const patch = (name: string, value: unknown = measurement) =>
-  send("PATCH", JSON.stringify({ name, measurement: value }));
+const patch = (name: string, value: unknown = measurement, breakpoint = "xl") =>
+  send("PATCH", JSON.stringify({ name, breakpoint, measurement: value }));
 
 const file = () => join(folder, "ghostly.json");
 const readData = () => JSON.parse(readFileSync(file(), "utf8"));
@@ -136,7 +136,7 @@ describe("ghostly dev", () => {
     await startCollector();
     expect((await patch("card")).status).toBe(204);
     await waitFor(() => existsSync(file()));
-    expect(readData()).toEqual({ card: measurement });
+    expect(readData()).toEqual({ card: { xl: measurement } });
   });
 
   test("writes the file once for many measurements, sorted by name", async () => {
@@ -150,24 +150,34 @@ describe("ghostly dev", () => {
   });
 
   test("keeps the entries that are already in the file", async () => {
-    await startCollector(JSON.stringify({ old: measurement }));
+    await startCollector(JSON.stringify({ old: { xl: measurement } }));
     await patch("new");
     await waitFor(() => "new" in readData());
     expect(Object.keys(readData())).toEqual(["new", "old"]);
   });
 
   test("replaces a changed measurement", async () => {
-    await startCollector(JSON.stringify({ card: measurement }));
+    await startCollector(JSON.stringify({ card: { xl: measurement } }));
     const changed = { ...measurement, height: 80 };
     await patch("card", changed);
-    await waitFor(() => readData().card.height === 80);
-    expect(readData()).toEqual({ card: changed });
+    await waitFor(() => readData().card.xl.height === 80);
+    expect(readData()).toEqual({ card: { xl: changed } });
+  });
+
+  test("keeps the measurements of the other breakpoints", async () => {
+    await startCollector(JSON.stringify({ card: { xl: measurement } }));
+    const narrow = { ...measurement, width: 40 };
+    await patch("card", narrow, "base");
+    await waitFor(() => "base" in readData().card);
+    expect(readData()).toEqual({ card: { base: narrow, xl: measurement } });
+    // Sorted, so the file only changes where values change.
+    expect(Object.keys(readData().card)).toEqual(["base", "xl"]);
   });
 
   test("doesn't write when nothing changed", async () => {
     // Not formatted like the collector would write it, so a write would
     // show.
-    const existing = JSON.stringify({ card: measurement });
+    const existing = JSON.stringify({ card: { xl: measurement } });
     const { output } = await startCollector(existing);
     expect((await patch("card")).status).toBe(204);
     // Longer than the collector waits before writing (100 ms).
@@ -196,7 +206,7 @@ describe("ghostly dev", () => {
     const headers: Record<string, string> = from ? { origin: from } : {};
     const response = await send(
       "PATCH",
-      JSON.stringify({ name: "card", measurement }),
+      JSON.stringify({ name: "card", breakpoint: "xl", measurement }),
       headers,
     );
     expect(response.status).toBe(403);
@@ -208,7 +218,7 @@ describe("ghostly dev", () => {
     await startCollector();
     const response = await send(
       "PATCH",
-      JSON.stringify({ name: "card", measurement }),
+      JSON.stringify({ name: "card", breakpoint: "xl", measurement }),
       { origin: "http://127.0.0.1:5173" },
     );
     expect(response.status).toBe(204);
@@ -222,8 +232,20 @@ describe("ghostly dev", () => {
 
   test.each([
     ["broken JSON", "{"],
-    ["no name", JSON.stringify({ measurement })],
-    ["no boxes", JSON.stringify({ name: "card", measurement: { width: 1 } })],
+    ["no name", JSON.stringify({ breakpoint: "xl", measurement })],
+    ["no breakpoint", JSON.stringify({ name: "card", measurement })],
+    [
+      "an empty breakpoint",
+      JSON.stringify({ name: "card", breakpoint: "", measurement }),
+    ],
+    [
+      "no boxes",
+      JSON.stringify({
+        name: "card",
+        breakpoint: "xl",
+        measurement: { width: 1 },
+      }),
+    ],
   ])("rejects %s", async (_, body) => {
     await startCollector();
     expect((await send("PATCH", body)).status).toBe(400);

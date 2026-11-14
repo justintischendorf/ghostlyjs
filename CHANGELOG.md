@@ -22,6 +22,12 @@ and this project adheres to
   playgrounds use it for the team grid and the posts that load for real.
 - `data-ghost` attribute with the name on the content wrapper and the
   skeletons, to find a `<Ghost>` in the browser's dev tools.
+- Responsive skeletons: a `<Ghost>` is measured once per breakpoint
+  (Tailwind's by default, others with the `breakpoints` prop of
+  `<GhostlyProvider>`), and CSS media queries show the skeleton for the
+  current window width. The server renders the same HTML as the browser,
+  so there are no hydration errors. A breakpoint that was never measured
+  uses the next smaller measured one.
 - Measuring in dev mode: `<Ghost>` measures the real rendered content (text
   lines, surfaces, images, icons, form controls, Shadow DOM) instead of
   using predefined variants. Production builds don't measure. ([#15])
@@ -50,6 +56,12 @@ and this project adheres to
 - Linting and formatting with oxlint and oxfmt, CI checks, PR template and
   Dependabot. ([#4], [#5], [#9], [#11])
 - MIT license and security policy. ([#7], [#12])
+
+### Changed
+
+- `ghostly.json` stores the measurements of each `<Ghost>` per breakpoint:
+  `{ "name": { "xl": { ... } } }` instead of `{ "name": { ... } }`. Files
+  from before have to be measured again.
 
 ### Fixed
 
