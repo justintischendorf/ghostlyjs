@@ -1,11 +1,11 @@
-// <GhostlyProvider> passes the measured skeleton data down to every <Ghostly>.
+// <GhostlyProvider> passes the measured skeleton data down to every <Ghost>.
 
 import { createContext, useContext, type ReactNode } from "react";
 
 import type { GhostlyData } from "../core/types";
 import type { GhostlyProviderProps } from "./types";
 
-// Empty by default, so <Ghostly> also works without a provider.
+// Empty by default, so <Ghost> also works without a provider.
 const GhostlyContext = createContext<GhostlyData>({});
 
 // Wrap the app once and pass the generated data (e.g. `ghostly.json`).
@@ -19,7 +19,7 @@ export function GhostlyProvider({
   );
 }
 
-// Used by <Ghostly> to read its measurement.
+// Used by <Ghost> to read its measurement.
 export function useGhostlyData(): GhostlyData {
   return useContext(GhostlyContext);
 }

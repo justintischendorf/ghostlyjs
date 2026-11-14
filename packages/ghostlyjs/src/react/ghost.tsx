@@ -2,39 +2,43 @@ import type { ReactNode } from "react";
 
 import type { GhostlyMeasurement } from "../core/types";
 import { useGhostlyData } from "./ghostly-provider";
-import type { GhostlyProps, GhostlyVariant } from "./types";
+import type { GhostProps, GhostVariant } from "./types";
 
-// <Ghostly> renders its children when `isLoading` is false, otherwise a
+// <Ghost> renders its children when `isLoading` is false, otherwise a
 // skeleton sized by the measurement stored under its `name`.
-export function Ghostly({
+export function Ghost({
   children,
   name,
   isLoading,
   variant,
-}: GhostlyProps): ReactNode {
+}: GhostProps): ReactNode {
   const measurement = useGhostlyData()[name];
 
   if (!isLoading) {
-    return <div>{children}</div>;
+    // `display: contents` removes the wrapper from the layout, so the
+    // children keep the parent's flex/grid context and percentage sizes.
+    return <div style={{ display: "contents" }}>{children}</div>;
   }
   return (
-    <GhostlySkeleton name={name} variant={variant} measurement={measurement} />
+    <GhostSkeleton name={name} variant={variant} measurement={measurement} />
   );
 }
 
-// <GhostlySkeleton> renders the placeholder shape chosen by `variant`.
-function GhostlySkeleton({
+// <GhostSkeleton> renders the placeholder shape chosen by `variant`.
+function GhostSkeleton({
   name,
   variant,
   measurement,
 }: {
   name: string;
-  variant?: GhostlyVariant;
+  variant?: GhostVariant;
   measurement?: GhostlyMeasurement;
 }): ReactNode {
-  // Measured size from the provider. Without a measurement for `name`,
-  // width and height stay undefined and the div keeps its natural size.
-  const style = { width: measurement?.width, height: measurement?.height };
+  // Measured size from the provider. `flexShrink: 0` keeps that size in a
+  // flex row. Without a measurement for `name`, the div keeps its natural size.
+  const style = measurement
+    ? { width: measurement.width, height: measurement.height, flexShrink: 0 }
+    : undefined;
 
   switch (variant) {
     // Rectangle for a block of content, e.g. a card or an image.

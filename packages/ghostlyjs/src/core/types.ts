@@ -6,5 +6,5 @@ export type GhostlyMeasurement = {
   height: number;
 };
 
-// All measured skeletons, keyed by the `name` prop of <Ghostly>.
+// All measured skeletons, keyed by the `name` prop of <Ghost>.
 export type GhostlyData = Record<string, GhostlyMeasurement>;
