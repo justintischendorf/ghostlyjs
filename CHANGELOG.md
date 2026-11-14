@@ -23,11 +23,14 @@ and this project adheres to
 - `ghostly dev` command: a local collector that receives the measurements
   from the browser and writes them to `ghostly.json`. ([#17])
 - A single placeholder bar for a `<Ghost>` that was never measured. ([#19])
+- Pulse animation on skeletons, turned off when the user prefers reduced
+  motion. `<GhostlyProvider>` adds the styles, so no stylesheet needs to
+  be imported. ([#21])
 - Package entries: `ghostlyjs` (React), `ghostlyjs/core` and the `ghostly`
   command, built with tsdown. ([#13])
 - Logo. ([#20])
-- Next.js playground with pages for common layouts, real async loading and
-  edge cases. ([#14], [#18], [#20])
+- Next.js playground with pages for common layouts, real async loading,
+  edge cases and a light/dark toggle. ([#14], [#18], [#20], [#21])
 - Linting and formatting with oxlint and oxfmt, CI checks, PR template and
   Dependabot. ([#4], [#5], [#9], [#11])
 - MIT license and security policy. ([#7], [#12])
@@ -40,6 +43,11 @@ and this project adheres to
   overflow clipping (`truncate`, `line-clamp`, scroll areas), rotated and
   scaled elements, inline images and rounded icons. ([#19])
 - The placeholder package can be published to npm. ([#3])
+
+### Removed
+
+- The unfinished `ghostly generate` command. `ghostly dev` already writes
+  the measurements to `ghostly.json`. ([#22])
 
 ## [0.0.1] - 2026-11-13
 
@@ -67,3 +75,5 @@ and this project adheres to
 [#18]: https://github.com/justintischendorf/ghostlyjs/pull/18
 [#19]: https://github.com/justintischendorf/ghostlyjs/pull/19
 [#20]: https://github.com/justintischendorf/ghostlyjs/pull/20
+[#21]: https://github.com/justintischendorf/ghostlyjs/pull/21
+[#22]: https://github.com/justintischendorf/ghostlyjs/pull/22

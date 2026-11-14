@@ -1,4 +1,4 @@
-// Public entry of `ghostlyjs/core`: types, measuring and generating.
+// Public entry of `ghostlyjs/core`: types and measuring.
 
 import type { GhostBoxContent, GhostBoxMeasurement } from "./types";
 
