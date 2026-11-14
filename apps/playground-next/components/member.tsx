@@ -1,10 +1,18 @@
-export default function MemberCard() {
+type MemberCardProps = {
+  name: string;
+  role: string;
+  initials: string;
+};
+
+export default function MemberCard({ name, role, initials }: MemberCardProps) {
   return (
-    <div className="flex gap-4 border border-accent/50 rounded-2xl items-center px-4 py-2">
-      <div className="sm:w-16 sm:h-16 h-10 w-10 bg-accent rounded-full shrink-0"></div>
+    <div className="flex items-center gap-4 rounded-2xl border border-border bg-card p-4">
+      <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-accent font-bold text-background">
+        {initials}
+      </div>
       <div className="flex flex-col">
-        <h1 className="sm:text-lg text-base font-bold">Peter Parker</h1>
-        <p className="sm:text-sm text-xs">2000-01-01</p>
+        <h3 className="font-semibold">{name}</h3>
+        <p className="text-sm text-muted">{role}</p>
       </div>
     </div>
   );

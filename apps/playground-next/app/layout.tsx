@@ -1,3 +1,5 @@
+import { LoadingProvider } from "@/components/loading";
+import Nav from "@/components/nav";
 import { GhostlyProvider } from "ghostlyjs";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
@@ -27,8 +29,15 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">
-        <GhostlyProvider data={data}>{children}</GhostlyProvider>
+      <body className="flex min-h-full flex-col">
+        <GhostlyProvider data={data}>
+          <LoadingProvider>
+            <Nav />
+            <main className="mx-auto flex w-full max-w-6xl flex-col gap-12 px-4 py-10 sm:px-8 sm:py-14">
+              {children}
+            </main>
+          </LoadingProvider>
+        </GhostlyProvider>
       </body>
     </html>
   );
