@@ -32,7 +32,14 @@ and this project adheres to
 - Next.js playground with pages for common layouts, real async loading,
   edge cases and a light/dark toggle. ([#14], [#18], [#20], [#21])
 - Vite playground with the same pages on React 18.0.0, the oldest React
-  the package supports.
+  the package supports. ([#23])
+- Unit tests with Vitest for the measuring code, `<Ghost>` and
+  `<GhostlyProvider>` (in dev mode and in production) and the
+  `ghostly dev` collector. The browser parts run in Chromium, because the
+  measuring reads the real layout.
+- E2E tests with Playwright: in both playgrounds, at desktop and phone
+  width, each skeleton must cover the same area as its content, box by
+  box, also on the page that loads for real. Unit and e2e tests run in CI.
 - Linting and formatting with oxlint and oxfmt, CI checks, PR template and
   Dependabot. ([#4], [#5], [#9], [#11])
 - MIT license and security policy. ([#7], [#12])
@@ -79,3 +86,4 @@ and this project adheres to
 [#20]: https://github.com/justintischendorf/ghostlyjs/pull/20
 [#21]: https://github.com/justintischendorf/ghostlyjs/pull/21
 [#22]: https://github.com/justintischendorf/ghostlyjs/pull/22
+[#23]: https://github.com/justintischendorf/ghostlyjs/pull/23

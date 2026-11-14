@@ -15,7 +15,7 @@ jobs:
   ci:
     name: CI
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - name: Check out code
@@ -45,3 +45,22 @@ jobs:
 
       - name: Build
         run: bun run build
+
+      # Unit and e2e tests both run in Chromium through Playwright.
+      - name: Install Playwright Chromium
+        working-directory: apps/e2e
+        run: bunx playwright install --with-deps chromium
+
+      - name: Unit tests
+        run: bun run test
+
+      - name: E2E tests
+        run: bun run test:e2e
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: apps/e2e/playwright-report
+          retention-days: 7
