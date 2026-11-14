@@ -3,15 +3,60 @@ import { defineConfig } from "vitest/config";
 
 // The measuring code reads the real layout (getClientRects,
 // getComputedStyle). jsdom and happy-dom have no layout engine and return 0
-// for every size, so the tests run in a real Chromium instead.
+// for every size, so these tests run in a real Chromium.
+// A function: Vitest changes the object, so each project needs its own.
+const browser = () => ({
+  enabled: true,
+  provider: playwright(),
+  headless: true,
+  instances: [{ browser: "chromium" as const }],
+});
+
+// <Ghost> only measures when `process.env.NODE_ENV` is "development". The
+// bundler replaces that value while building, so it can't be changed inside
+// a test: each mode gets its own project instead.
+const nodeEnv = (mode: string) => ({
+  "process.env.NODE_ENV": JSON.stringify(mode),
+});
+
 export default defineConfig({
   test: {
-    include: ["src/**/*.test.ts"],
-    browser: {
-      enabled: true,
-      provider: playwright(),
-      headless: true,
-      instances: [{ browser: "chromium" }],
-    },
+    projects: [
+      {
+        test: {
+          name: "core",
+          include: ["src/core/**/*.test.ts"],
+          browser: browser(),
+        },
+      },
+      {
+        define: nodeEnv("development"),
+        test: {
+          name: "react-dev",
+          include: ["src/react/**/*.test.tsx"],
+          exclude: ["src/react/**/*.prod.test.tsx"],
+          browser: browser(),
+        },
+      },
+      {
+        define: nodeEnv("production"),
+        // JSX for production React; its dev helper `jsxDEV` doesn't exist
+        // there.
+        oxc: { jsx: { development: false } },
+        test: {
+          name: "react-prod",
+          include: ["src/react/**/*.prod.test.tsx"],
+          browser: browser(),
+        },
+      },
+      // The `ghostly` command is a Node program, so its tests run in Node.
+      {
+        test: {
+          name: "cli",
+          include: ["src/cli/**/*.test.ts"],
+          environment: "node",
+        },
+      },
+    ],
   },
 });

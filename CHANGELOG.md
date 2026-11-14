@@ -33,11 +33,13 @@ and this project adheres to
   edge cases and a light/dark toggle. ([#14], [#18], [#20], [#21])
 - Vite playground with the same pages on React 18.0.0, the oldest React
   the package supports. ([#23])
-- Unit tests for the measuring code. They run in Chromium (Vitest browser
-  mode), because the measuring reads the real layout.
+- Unit tests with Vitest for the measuring code, `<Ghost>` and
+  `<GhostlyProvider>` (in dev mode and in production) and the
+  `ghostly dev` collector. The browser parts run in Chromium, because the
+  measuring reads the real layout.
 - E2E tests with Playwright: in both playgrounds, at desktop and phone
   width, each skeleton must cover the same area as its content, box by
-  box. Unit and e2e tests run in CI.
+  box, also on the page that loads for real. Unit and e2e tests run in CI.
 - Linting and formatting with oxlint and oxfmt, CI checks, PR template and
   Dependabot. ([#4], [#5], [#9], [#11])
 - MIT license and security policy. ([#7], [#12])

@@ -10,9 +10,9 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
-// /async loads for real and has no toggle.
+// /async loads for real and has no toggle; it has its own test below.
 const paths = ["/", "/feed", "/dashboard", "/form", "/layouts", "/edge-cases"];
 
 // Allowed difference in pixels. Measurements are rounded to one decimal,
@@ -62,49 +62,91 @@ test.beforeEach(async ({ page }) => {
 for (const path of paths) {
   test(`skeletons match the content on ${path}`, async ({ page }) => {
     await page.goto(path);
-    // Load every font first. The browser loads a font only once text uses
-    // it, and the skeletons show no text. So a font like the mono one would
-    // arrive after <Ghost> measured with a fallback font, and the content
-    // would no longer match the measurement.
-    await page.evaluate(async () => {
-      await Promise.all([...document.fonts].map((font) => font.load()));
-    });
+    await loadAllFonts(page);
 
     await toggle(page, "Show content");
     await page.addScriptTag({ content: measuringScript });
-    const contents = await measureContents(page);
+    const contents = await measureContents(page.locator("body"));
 
     await toggle(page, "Show skeletons");
-    const skeletons = await measureSkeletons(page);
+    const skeletons = await measureSkeletons(page.locator("body"));
 
-    // Every page has Ghosts; none found means the selector broke, and the
-    // checks below would pass without checking anything.
-    expect(contents.filter(Boolean).length).toBeGreaterThan(0);
-    // One skeleton per <Ghost>, in the same order as the content.
-    expect(skeletons).toHaveLength(contents.length);
-
-    for (const [index, content] of contents.entries()) {
-      // A <Ghost> that is always loading (never measured) has no content.
-      if (!content) continue;
-      const skeleton = skeletons[index];
-      const label = `Ghost #${index} ("${content.label}")`;
-      expect.soft(skeleton, `${label}: skeleton missing`).toBeDefined();
-      if (!skeleton) continue;
-
-      expectClose(skeleton, content, `${label}: frame`);
-      expect
-        .soft(skeleton.boxes.length, `${label}: number of boxes`)
-        .toBe(content.boxes.length);
-      for (const [boxIndex, box] of content.boxes.entries()) {
-        const drawn = skeleton.boxes[boxIndex];
-        if (!drawn) continue;
-        expectClose(drawn, box, `${label}: box #${boxIndex}`);
-        expect
-          .soft(drawn.rotate, `${label}: box #${boxIndex} rotate`)
-          .toBe(box.rotate);
-      }
-    }
+    expectSkeletonsMatch(contents, skeletons);
   });
+}
+
+// /async loads for real instead of using the toggle.
+test("skeletons on /async show while loading and match the content", async ({
+  page,
+}) => {
+  // `commit`: check before the page finished loading, while the data is
+  // still on its way.
+  await page.goto("/async", { waitUntil: "commit" });
+  const skeletons = page.locator(".ghostly-skeleton, .ghostly-placeholder");
+  await expect(skeletons.first()).toBeVisible();
+  await loadAllFonts(page);
+
+  // Then the content of all Ghosts, and no skeleton is left.
+  await expect(skeletons).toHaveCount(0, { timeout: 10_000 });
+  await expect(
+    page.getByText(/Loaded (on the server|in the browser)/),
+  ).toBeVisible();
+
+  // The posts that load in useEffect: "Load again" shows their skeletons,
+  // drawn from the measurement taken when the content arrived.
+  const posts = page.locator("section").filter({ hasText: "useEffect" });
+  await page.addScriptTag({ content: measuringScript });
+  const contents = await measureContents(posts);
+  await posts.getByRole("button", { name: "Load again" }).click();
+  await expect(posts.locator(".ghostly-skeleton")).toHaveCount(contents.length);
+  expectSkeletonsMatch(contents, await measureSkeletons(posts));
+});
+
+// Load every font first. The browser loads a font only once text uses it,
+// and the skeletons show no text. So a font like the mono one would arrive
+// after <Ghost> measured with a fallback font, and the content would no
+// longer match the measurement.
+// `allSettled`: some fonts can't load and that's fine, the browser uses the
+// next one. E.g. the fallback of next/font is `local("Arial")`, which the
+// Linux CI doesn't have.
+async function loadAllFonts(page: Page) {
+  await page.evaluate(async () => {
+    await Promise.allSettled([...document.fonts].map((font) => font.load()));
+  });
+}
+
+// Each skeleton must sit where its content was, box by box.
+function expectSkeletonsMatch(
+  contents: (Frame | null)[],
+  skeletons: (Frame | null)[],
+) {
+  // Every page has Ghosts; none found means the selector broke, and the
+  // checks below would pass without checking anything.
+  expect(contents.filter(Boolean).length).toBeGreaterThan(0);
+  // One skeleton per <Ghost>, in the same order as the content.
+  expect(skeletons).toHaveLength(contents.length);
+
+  for (const [index, content] of contents.entries()) {
+    // A <Ghost> that is always loading (never measured) has no content.
+    if (!content) continue;
+    const skeleton = skeletons[index];
+    const label = `Ghost #${index} ("${content.label}")`;
+    expect.soft(skeleton, `${label}: skeleton missing`).toBeDefined();
+    if (!skeleton) continue;
+
+    expectClose(skeleton, content, `${label}: frame`);
+    expect
+      .soft(skeleton.boxes.length, `${label}: number of boxes`)
+      .toBe(content.boxes.length);
+    for (const [boxIndex, box] of content.boxes.entries()) {
+      const drawn = skeleton.boxes[boxIndex];
+      if (!drawn) continue;
+      expectClose(drawn, box, `${label}: box #${boxIndex}`);
+      expect
+        .soft(drawn.rotate, `${label}: box #${boxIndex} rotate`)
+        .toBe(box.rotate);
+    }
+  }
 }
 
 async function toggle(page: Page, label: string) {
@@ -116,20 +158,23 @@ async function toggle(page: Page, label: string) {
   await page.waitForLoadState("networkidle");
 }
 
-// For each top-level <Ghost>: its content measured by `ghostlyjs/core`, at
-// its position in the page. `null` for a <Ghost> that still shows a
-// skeleton (one that is always loading).
-function measureContents(page: Page): Promise<(Frame | null)[]> {
-  return page.evaluate((selector) => {
+// For each top-level <Ghost> inside `scope`: its content measured by
+// `ghostlyjs/core`, at its position in the page. `null` for a <Ghost> that
+// still shows a skeleton (one that is always loading).
+function measureContents(scope: Locator): Promise<(Frame | null)[]> {
+  return scope.evaluate((root, selector) => {
     // Nested <Ghost>s belong to the skeleton of the outer one.
-    const ghosts = [...document.querySelectorAll(selector)].filter(
+    const ghosts = [...root.querySelectorAll(selector)].filter(
       (element) => !element.parentElement?.closest(selector),
     );
     return ghosts.map((element) => {
       if (!element.matches('[style="display: contents;"]')) return null;
       const { measureElement, measureFrame } = window.ghostlyTest;
       const { width, height, boxes } = measureElement(element);
-      const frame = measureFrame(element);
+      // Page coordinates: the page may scroll between the two measurings
+      // (e.g. to click a button).
+      const viewport = measureFrame(element);
+      const frame = { x: viewport.x + scrollX, y: viewport.y + scrollY };
       return {
         label: (element.textContent ?? "").trim().slice(0, 30),
         x: frame.x,
@@ -147,18 +192,19 @@ function measureContents(page: Page): Promise<(Frame | null)[]> {
   }, GHOST);
 }
 
-// The drawn skeletons and their boxes, in page coordinates.
-function measureSkeletons(page: Page): Promise<(Frame | null)[]> {
-  return page.evaluate((selector) => {
-    return [...document.querySelectorAll(selector)].map((element) => {
+// The drawn skeletons inside `scope` and their boxes, in page coordinates.
+function measureSkeletons(scope: Locator): Promise<(Frame | null)[]> {
+  return scope.evaluate((root, selector) => {
+    return [...root.querySelectorAll(selector)].map((element) => {
       if (!element.matches(".ghostly-skeleton")) return null;
-      const frame = element.getBoundingClientRect();
+      const rect = element.getBoundingClientRect();
+      const frame = { x: rect.x + scrollX, y: rect.y + scrollY };
       return {
         label: "",
         x: frame.x,
         y: frame.y,
-        width: frame.width,
-        height: frame.height,
+        width: rect.width,
+        height: rect.height,
         boxes: [...element.querySelectorAll<HTMLElement>(".ghostly-box")].map(
           (box) => {
             // The computed values ignore `transform`, so a rotated box keeps
