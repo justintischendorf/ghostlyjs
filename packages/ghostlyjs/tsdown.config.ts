@@ -10,6 +10,9 @@ const config: UserConfig = defineConfig({
   },
   // Browser and Node code in one build (the default `node` would emit .mjs).
   platform: "neutral",
+  // `neutral` doesn't know Node's built-in modules; the cli imports them
+  // from Node at runtime.
+  deps: { neverBundle: [/^node:/] },
   // Bundling drops "use client", so it is added back; the cli needs a shebang.
   banner: ({ fileName }) => {
     if (!fileName.endsWith(".js")) return undefined;

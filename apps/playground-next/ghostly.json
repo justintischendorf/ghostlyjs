@@ -2,6 +2,449 @@
   "avatar": {
     "width": 120,
     "height": 120,
-    "boxes": [{ "x": 0, "y": 0, "width": 120, "height": 120, "radius": 60 }]
+    "flexShrink": 0,
+    "boxes": [
+      {
+        "x": 0,
+        "y": 0,
+        "width": 120,
+        "height": 120,
+        "radius": 60
+      }
+    ]
+  },
+  "footer": {
+    "width": 1294,
+    "height": 160,
+    "flexShrink": 1,
+    "boxes": [
+      {
+        "x": 0,
+        "y": 0,
+        "width": 1294,
+        "height": 160,
+        "radius": 16
+      }
+    ]
+  },
+  "heading": {
+    "width": 676,
+    "height": 490,
+    "flexShrink": 1,
+    "boxes": [
+      {
+        "x": 0,
+        "y": 0,
+        "width": 676,
+        "height": 490,
+        "radius": 24
+      },
+      {
+        "x": 41,
+        "y": 43.5,
+        "width": 94.7,
+        "height": 26.5,
+        "radius": 4
+      },
+      {
+        "x": 41,
+        "y": 96.5,
+        "width": 575.2,
+        "height": 20.5,
+        "radius": 4
+      },
+      {
+        "x": 41,
+        "y": 124.5,
+        "width": 545.2,
+        "height": 20.5,
+        "radius": 4
+      },
+      {
+        "x": 41,
+        "y": 152.5,
+        "width": 593.2,
+        "height": 20.5,
+        "radius": 4
+      },
+      {
+        "x": 41,
+        "y": 180.5,
+        "width": 575.2,
+        "height": 20.5,
+        "radius": 4
+      },
+      {
+        "x": 41,
+        "y": 208.5,
+        "width": 545.2,
+        "height": 20.5,
+        "radius": 4
+      },
+      {
+        "x": 41,
+        "y": 236.5,
+        "width": 593.2,
+        "height": 20.5,
+        "radius": 4
+      },
+      {
+        "x": 41,
+        "y": 264.5,
+        "width": 575.2,
+        "height": 20.5,
+        "radius": 4
+      },
+      {
+        "x": 41,
+        "y": 292.5,
+        "width": 545.2,
+        "height": 20.5,
+        "radius": 4
+      },
+      {
+        "x": 41,
+        "y": 320.5,
+        "width": 593.2,
+        "height": 20.5,
+        "radius": 4
+      },
+      {
+        "x": 41,
+        "y": 348.5,
+        "width": 575.2,
+        "height": 20.5,
+        "radius": 4
+      },
+      {
+        "x": 41,
+        "y": 376.5,
+        "width": 545.2,
+        "height": 20.5,
+        "radius": 4
+      },
+      {
+        "x": 41,
+        "y": 404.5,
+        "width": 161.1,
+        "height": 20.5,
+        "radius": 4
+      }
+    ]
+  },
+  "member-card-0": {
+    "width": 287,
+    "height": 82,
+    "flexShrink": 1,
+    "boxes": [
+      {
+        "x": 0,
+        "y": 0,
+        "width": 287,
+        "height": 82,
+        "radius": 16
+      },
+      {
+        "x": 17,
+        "y": 9,
+        "width": 64,
+        "height": 64,
+        "radius": 32
+      },
+      {
+        "x": 97,
+        "y": 20.5,
+        "width": 106.1,
+        "height": 20.5,
+        "radius": 4
+      },
+      {
+        "x": 97,
+        "y": 47,
+        "width": 71.6,
+        "height": 15.5,
+        "radius": 4
+      }
+    ]
+  },
+  "member-card-1": {
+    "width": 287,
+    "height": 82,
+    "flexShrink": 1,
+    "boxes": [
+      {
+        "x": 0,
+        "y": 0,
+        "width": 287,
+        "height": 82,
+        "radius": 16
+      },
+      {
+        "x": 17,
+        "y": 9,
+        "width": 64,
+        "height": 64,
+        "radius": 32
+      },
+      {
+        "x": 97,
+        "y": 20.5,
+        "width": 106.1,
+        "height": 20.5,
+        "radius": 4
+      },
+      {
+        "x": 97,
+        "y": 47,
+        "width": 71.6,
+        "height": 15.5,
+        "radius": 4
+      }
+    ]
+  },
+  "member-card-2": {
+    "width": 287,
+    "height": 82,
+    "flexShrink": 1,
+    "boxes": [
+      {
+        "x": 0,
+        "y": 0,
+        "width": 287,
+        "height": 82,
+        "radius": 16
+      },
+      {
+        "x": 17,
+        "y": 9,
+        "width": 64,
+        "height": 64,
+        "radius": 32
+      },
+      {
+        "x": 97,
+        "y": 20.5,
+        "width": 106.1,
+        "height": 20.5,
+        "radius": 4
+      },
+      {
+        "x": 97,
+        "y": 47,
+        "width": 71.6,
+        "height": 15.5,
+        "radius": 4
+      }
+    ]
+  },
+  "member-card-3": {
+    "width": 287,
+    "height": 82,
+    "flexShrink": 1,
+    "boxes": [
+      {
+        "x": 0,
+        "y": 0,
+        "width": 287,
+        "height": 82,
+        "radius": 16
+      },
+      {
+        "x": 17,
+        "y": 9,
+        "width": 64,
+        "height": 64,
+        "radius": 32
+      },
+      {
+        "x": 97,
+        "y": 20.5,
+        "width": 106.1,
+        "height": 20.5,
+        "radius": 4
+      },
+      {
+        "x": 97,
+        "y": 47,
+        "width": 71.6,
+        "height": 15.5,
+        "radius": 4
+      }
+    ]
+  },
+  "member-card-4": {
+    "width": 287,
+    "height": 82,
+    "flexShrink": 1,
+    "boxes": [
+      {
+        "x": 0,
+        "y": 0,
+        "width": 287,
+        "height": 82,
+        "radius": 16
+      },
+      {
+        "x": 17,
+        "y": 9,
+        "width": 64,
+        "height": 64,
+        "radius": 32
+      },
+      {
+        "x": 97,
+        "y": 20.5,
+        "width": 106.1,
+        "height": 20.5,
+        "radius": 4
+      },
+      {
+        "x": 97,
+        "y": 47,
+        "width": 71.6,
+        "height": 15.5,
+        "radius": 4
+      }
+    ]
+  },
+  "member-card-5": {
+    "width": 287,
+    "height": 82,
+    "flexShrink": 1,
+    "boxes": [
+      {
+        "x": 0,
+        "y": 0,
+        "width": 287,
+        "height": 82,
+        "radius": 16
+      },
+      {
+        "x": 17,
+        "y": 9,
+        "width": 64,
+        "height": 64,
+        "radius": 32
+      },
+      {
+        "x": 97,
+        "y": 20.5,
+        "width": 106.1,
+        "height": 20.5,
+        "radius": 4
+      },
+      {
+        "x": 97,
+        "y": 47,
+        "width": 71.6,
+        "height": 15.5,
+        "radius": 4
+      }
+    ]
+  },
+  "member-card-6": {
+    "width": 287,
+    "height": 82,
+    "flexShrink": 1,
+    "boxes": [
+      {
+        "x": 0,
+        "y": 0,
+        "width": 287,
+        "height": 82,
+        "radius": 16
+      },
+      {
+        "x": 17,
+        "y": 9,
+        "width": 64,
+        "height": 64,
+        "radius": 32
+      },
+      {
+        "x": 97,
+        "y": 20.5,
+        "width": 106.1,
+        "height": 20.5,
+        "radius": 4
+      },
+      {
+        "x": 97,
+        "y": 47,
+        "width": 71.6,
+        "height": 15.5,
+        "radius": 4
+      }
+    ]
+  },
+  "member-card-7": {
+    "width": 287,
+    "height": 82,
+    "flexShrink": 1,
+    "boxes": [
+      {
+        "x": 0,
+        "y": 0,
+        "width": 287,
+        "height": 82,
+        "radius": 16
+      },
+      {
+        "x": 17,
+        "y": 9,
+        "width": 64,
+        "height": 64,
+        "radius": 32
+      },
+      {
+        "x": 97,
+        "y": 20.5,
+        "width": 106.1,
+        "height": 20.5,
+        "radius": 4
+      },
+      {
+        "x": 97,
+        "y": 47,
+        "width": 71.6,
+        "height": 15.5,
+        "radius": 4
+      }
+    ]
+  },
+  "member-card-8": {
+    "width": 287,
+    "height": 82,
+    "flexShrink": 1,
+    "boxes": [
+      {
+        "x": 0,
+        "y": 0,
+        "width": 287,
+        "height": 82,
+        "radius": 16
+      },
+      {
+        "x": 17,
+        "y": 9,
+        "width": 64,
+        "height": 64,
+        "radius": 32
+      },
+      {
+        "x": 97,
+        "y": 20.5,
+        "width": 106.1,
+        "height": 20.5,
+        "radius": 4
+      },
+      {
+        "x": 97,
+        "y": 47,
+        "width": 71.6,
+        "height": 15.5,
+        "radius": 4
+      }
+    ]
   }
 }
