@@ -60,13 +60,22 @@ function sendToCollector(body: string): void {
   void collectorOnline.then((online) => online && send());
 }
 
+// The text color, faint: grey on light and on dark pages. Overlapping boxes
+// (text on a card) stack and look darker.
+const fill = { backgroundColor: "currentColor", opacity: 0.1 };
+
 function GhostSkeleton({
   measurement,
 }: {
   measurement?: GhostBoxMeasurement;
 }): ReactNode {
-  if (!measurement) return <div />;
-  const percent = (px: number) => `${(px / measurement.width) * 100}%`;
+  // Never measured yet: one bar, so the user still sees that something
+  // loads. It is replaced once the real content was shown in dev.
+  if (!measurement) {
+    return <div style={{ ...fill, height: "1.25em", borderRadius: 4 }} />;
+  }
+  const { width } = measurement;
+  const percent = (px: number) => `${(px / width) * 100}%`;
 
   return (
     // Fills the available width, but never gets wider than measured. So it
@@ -78,9 +87,12 @@ function GhostSkeleton({
       style={{
         position: "relative",
         width: "100%",
-        maxWidth: measurement.width,
+        maxWidth: width,
         height: measurement.height,
         flex: `0 ${measurement.flexShrink ?? 1} auto`,
+        // Same auto margins as the content (`mx-auto`, `ml-auto`).
+        marginLeft: measurement.align ? "auto" : undefined,
+        marginRight: measurement.align === "center" ? "auto" : undefined,
       }}
     >
       {measurement.boxes.map((box, index) => (
@@ -92,16 +104,16 @@ function GhostSkeleton({
             top: box.y,
             // Wide boxes (cards, text lines) stretch with the frame. Square-ish
             // boxes (avatars, icons) keep their size, so circles stay round,
-            // but never reach past the frame's right edge.
+            // but never reach past the frame's right edge. Boxes that already
+            // stuck out when measured (a badge on a corner) stay as they are.
             width:
               box.width > box.height * 1.5 ? percent(box.width) : box.width,
-            maxWidth: percent(measurement.width - box.x),
+            maxWidth:
+              box.x + box.width <= width ? percent(width - box.x) : undefined,
             height: box.height,
             borderRadius: box.radius,
-            // The text color, faint: grey on light and on dark pages.
-            // Overlapping boxes (text on a card) stack and look darker.
-            backgroundColor: "currentColor",
-            opacity: 0.1,
+            transform: box.rotate ? `rotate(${box.rotate}deg)` : undefined,
+            ...fill,
           }}
         />
       ))}

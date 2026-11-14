@@ -9,6 +9,8 @@ export type GhostBoxContent = {
   width: number;
   height: number;
   radius: number;
+  // Rotation in degrees, only for elements with a CSS transform.
+  rotate?: number;
 };
 
 // Measured structure of one <Ghost>: its frame and the boxes inside it.
@@ -18,6 +20,10 @@ export type GhostBoxMeasurement = {
   // CSS `flex-shrink` of the content (0 for `shrink-0`), so the skeleton
   // shrinks in a flex row like the real content does.
   flexShrink?: number;
+  // How the content sits in its parent when it is narrower: "center"
+  // (`mx-auto`) or "right" (`ml-auto`). Missing means left. A plain string,
+  // because TypeScript reads strings from an imported JSON file as `string`.
+  align?: string;
   boxes: GhostBoxContent[];
 };
 
