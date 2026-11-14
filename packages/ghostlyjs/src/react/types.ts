@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 
-import type { GhostlyData } from "../core/types";
+import type { Breakpoints, GhostlyData } from "../core/types";
 
 // Props for the <Ghost> component.
 export type GhostProps = {
@@ -23,5 +23,9 @@ export type GhostProps = {
 export type GhostlyProviderProps = {
   // Measured skeletons, usually imported from the generated `ghostly.json`.
   data: GhostlyData;
+  // Window widths where the layout changes, e.g. `{ sm: 640, md: 768 }`.
+  // A <Ghost> is measured per range and its skeleton switches with CSS at
+  // these widths, so they should match your CSS. Default: Tailwind's.
+  breakpoints?: Breakpoints;
   children: ReactNode;
 };

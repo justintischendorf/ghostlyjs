@@ -23,6 +23,7 @@ const optimizeDeps = {
     "react/jsx-dev-runtime",
     "react-dom",
     "react-dom/client",
+    "react-dom/server",
   ],
 };
 

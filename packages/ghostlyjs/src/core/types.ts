@@ -37,5 +37,13 @@ export type MeasureOptions = {
   list?: boolean;
 };
 
+// The measurements of one <Ghost>, keyed by breakpoint name ("base", "sm",
+// "md", ...): one per window width range it was measured in.
+export type GhostlyEntry = Record<string, GhostBoxMeasurement>;
+
 // All measured skeletons, keyed by the `name` prop of <Ghost>.
-export type GhostlyData = Record<string, GhostBoxMeasurement>;
+export type GhostlyData = Record<string, GhostlyEntry>;
+
+// Breakpoint names and the minimum window width in pixels where each one
+// starts, e.g. `{ sm: 640, md: 768 }`. Below the smallest one is "base".
+export type Breakpoints = Record<string, number>;

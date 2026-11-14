@@ -8,6 +8,7 @@
 // and an outdated `ghostly.json` doesn't make it fail.
 
 import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { expect, test, type Locator, type Page } from "@playwright/test";
@@ -42,14 +43,20 @@ type Skeleton = { name: string; frame: Frame | null };
 // as `window.ghostlyTest`. `measureFrame` is not exported, but the bundle
 // keeps its name, so the test uses the library's own idea of the frame.
 const measuringScript = `(() => {
-${readFileSync(
-  fileURLToPath(import.meta.resolve("ghostlyjs/core")),
-  "utf8",
-).replace(
+${measuringCode().replace(
   /^export \{.*\};?$/m,
   "window.ghostlyTest = { measureElement, measureFrame };",
 )}
 })();`;
+
+// The file with the code. The build moves code that `ghostlyjs/core` and
+// `ghostlyjs` share into a chunk file; then the entry only re-exports it.
+function measuringCode(): string {
+  const entry = fileURLToPath(import.meta.resolve("ghostlyjs/core"));
+  const code = readFileSync(entry, "utf8");
+  const chunk = /^export \{.*\} from "(\.[^"]+)";?$/m.exec(code)?.[1];
+  return chunk ? readFileSync(resolve(dirname(entry), chunk), "utf8") : code;
+}
 
 declare global {
   interface Window {
@@ -72,10 +79,27 @@ const LISTS = new Set(["home-members", "async-client-posts"]);
 // `data-ghost` holds the name.
 const SKELETON = ".ghostly-skeleton, .ghostly-placeholder";
 
+// Hydration errors React reports during a test. The server doesn't know the
+// window width, so it must render the same skeletons as the browser.
+let hydrationErrors: string[] = [];
+
 test.beforeEach(async ({ page }) => {
   // Never reach a running `ghostly dev`: it would store the measurements of
   // this test (e.g. in a phone window) in `ghostly.json`.
   await page.route("http://localhost:6767/**", (route) => route.abort());
+
+  hydrationErrors = [];
+  const collect = (text: string) => {
+    if (/hydrat/i.test(text)) hydrationErrors.push(text);
+  };
+  page.on("console", (message) => {
+    if (message.type() === "error") collect(message.text());
+  });
+  page.on("pageerror", (error) => collect(error.message));
+});
+
+test.afterEach(() => {
+  expect(hydrationErrors, "hydration errors").toEqual([]);
 });
 
 for (const path of paths) {
@@ -94,6 +118,35 @@ for (const path of paths) {
   });
 }
 
+// The skeleton switches with CSS when the window gets narrower or wider:
+// measured at the desktop width, then at the phone width, the desktop
+// skeleton must show again at the desktop width, without a new render.
+test("skeletons switch with the window width", async ({ page, isMobile }) => {
+  test.skip(isMobile, "resizes the window itself");
+  const desktop = page.viewportSize() ?? { width: 1280, height: 720 };
+  // /feed: the sidebar moves below the posts on narrow windows.
+  await page.goto("/feed");
+  await loadAllFonts(page);
+  await page.addScriptTag({ content: measuringScript });
+
+  await toggle(page, "Show content");
+  const contents = await measureContents(page.locator("body"));
+  await toggle(page, "Show skeletons");
+
+  // Measure the phone layout too: now each Ghost has two variants.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await toggle(page, "Show content");
+  await toggle(page, "Show skeletons");
+  expect(
+    await page.locator(".ghostly-skeleton").count(),
+    "both variants are in the page",
+  ).toBeGreaterThan(await page.locator(".ghostly-skeleton:visible").count());
+
+  await page.setViewportSize(desktop);
+  await page.evaluate(() => window.scrollTo(0, 0));
+  expectSkeletonsMatch(contents, await measureSkeletons(page.locator("body")));
+});
+
 // /async loads for real instead of using the toggle.
 test("skeletons on /async show while loading and match the content", async ({
   page,
@@ -102,7 +155,11 @@ test("skeletons on /async show while loading and match the content", async ({
   // still on its way.
   await page.goto("/async", { waitUntil: "commit" });
   const skeletons = page.locator(SKELETON);
-  await expect(skeletons.first()).toBeVisible();
+  await expect(
+    page
+      .locator(".ghostly-skeleton:visible, .ghostly-placeholder:visible")
+      .first(),
+  ).toBeVisible();
   await loadAllFonts(page);
 
   // Then the content of all Ghosts, and no skeleton is left.
@@ -117,7 +174,7 @@ test("skeletons on /async show while loading and match the content", async ({
   await page.addScriptTag({ content: measuringScript });
   const contents = await measureContents(posts);
   await posts.getByRole("button", { name: "Load again" }).click();
-  await expect(posts.locator(".ghostly-skeleton")).toHaveCount(
+  await expect(posts.locator(".ghostly-skeleton:visible")).toHaveCount(
     contents[0]?.items.length ?? 0,
   );
   expectSkeletonsMatch(contents, await measureSkeletons(posts));
@@ -265,43 +322,47 @@ function measureContents(scope: Locator): Promise<Content[]> {
 }
 
 // The drawn skeletons inside `scope` and their boxes, in page coordinates.
+// Only the shown ones: CSS hides the variants of other window widths.
 function measureSkeletons(scope: Locator): Promise<Skeleton[]> {
   return scope.evaluate(
     (root, selector) =>
-      [...root.querySelectorAll(selector)].map((element) => {
-        const name = element.getAttribute("data-ghost") ?? "";
-        if (!element.matches(".ghostly-skeleton")) return { name, frame: null };
-        const rect = element.getBoundingClientRect();
-        const x = rect.x + scrollX;
-        const y = rect.y + scrollY;
-        const boxes = [
-          ...element.querySelectorAll<HTMLElement>(".ghostly-box"),
-        ];
-        return {
-          name,
-          frame: {
-            x,
-            y,
-            width: rect.width,
-            height: rect.height,
-            boxes: boxes.map((box) => {
-              // The computed values ignore `transform`, so a rotated box
-              // keeps its real size. Unlike `offsetLeft` & co. they aren't
-              // rounded.
-              const style = getComputedStyle(box);
-              return {
-                x: x + parseFloat(style.left),
-                y: y + parseFloat(style.top),
-                width: parseFloat(style.width),
-                height: parseFloat(style.height),
-                rotate:
-                  parseFloat(box.style.transform.replace("rotate(", "")) ||
-                  undefined,
-              };
-            }),
-          },
-        };
-      }),
+      [...root.querySelectorAll(selector)]
+        .filter((element) => element.getClientRects().length > 0)
+        .map((element) => {
+          const name = element.getAttribute("data-ghost") ?? "";
+          if (!element.matches(".ghostly-skeleton"))
+            return { name, frame: null };
+          const rect = element.getBoundingClientRect();
+          const x = rect.x + scrollX;
+          const y = rect.y + scrollY;
+          const boxes = [
+            ...element.querySelectorAll<HTMLElement>(".ghostly-box"),
+          ];
+          return {
+            name,
+            frame: {
+              x,
+              y,
+              width: rect.width,
+              height: rect.height,
+              boxes: boxes.map((box) => {
+                // The computed values ignore `transform`, so a rotated box
+                // keeps its real size. Unlike `offsetLeft` & co. they aren't
+                // rounded.
+                const style = getComputedStyle(box);
+                return {
+                  x: x + parseFloat(style.left),
+                  y: y + parseFloat(style.top),
+                  width: parseFloat(style.width),
+                  height: parseFloat(style.height),
+                  rotate:
+                    parseFloat(box.style.transform.replace("rotate(", "")) ||
+                    undefined,
+                };
+              }),
+            },
+          };
+        }),
     SKELETON,
   );
 }

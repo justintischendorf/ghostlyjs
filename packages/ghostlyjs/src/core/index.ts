@@ -10,11 +10,24 @@ import type {
 export const DEFAULT_PORT = 6767;
 
 export type {
+  Breakpoints,
   GhostBoxContent,
   GhostlyData,
+  GhostlyEntry,
   GhostBoxMeasurement,
   MeasureOptions,
 } from "./types";
+export {
+  BASE,
+  breakpointCss,
+  breakpointOf,
+  DEFAULT_BREAKPOINTS,
+  hideClass,
+  rangesOf,
+  variantsOf,
+  type BreakpointRange,
+  type GhostVariant,
+} from "./breakpoints";
 
 // Elements measured as one box. Their insides (paths, <source>, <option>,
 // the text of a <textarea>) are not shapes of their own.

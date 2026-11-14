@@ -48,21 +48,27 @@ function startDevServer(): void {
     try {
       let body = "";
       for await (const chunk of request) body += chunk;
-      const { name, measurement } = JSON.parse(body);
-      if (typeof name !== "string" || !Array.isArray(measurement?.boxes)) {
+      const { name, breakpoint, measurement } = JSON.parse(body);
+      if (
+        typeof name !== "string" ||
+        typeof breakpoint !== "string" ||
+        !breakpoint ||
+        !Array.isArray(measurement?.boxes)
+      ) {
         throw new Error("not a measurement");
       }
+      // One measurement per breakpoint; the others of this <Ghost> stay.
+      const entry = data[name] ?? {};
       // Only write on real changes. Writing reloads the app, which measures
       // again; unchanged values end that loop.
-      if (JSON.stringify(data[name]) !== JSON.stringify(measurement)) {
-        data[name] = measurement;
-        console.log(`ghostly dev: updated "${name}"`);
+      if (JSON.stringify(entry[breakpoint]) !== JSON.stringify(measurement)) {
+        data[name] = sortByKey({ ...entry, [breakpoint]: measurement });
+        console.log(`ghostly dev: updated "${name}" (${breakpoint})`);
         // All <Ghost>s measure at once; write the file once for all of them,
         // sorted by name so the file only changes where values change.
         clearTimeout(writeTimer);
         writeTimer = setTimeout(() => {
-          const sorted = Object.fromEntries(Object.entries(data).sort());
-          writeFileSync(file, `${JSON.stringify(sorted, null, 2)}\n`);
+          writeFileSync(file, `${JSON.stringify(sortByKey(data), null, 2)}\n`);
         }, 100);
       }
       response.writeHead(204).end();
@@ -80,4 +86,9 @@ function startDevServer(): void {
     console.log(`ghostly dev: listening on http://localhost:${DEFAULT_PORT}`);
     console.log(`ghostly dev: writing to ${file}`);
   });
+}
+
+// Sorted keys, so the file only changes where values change.
+function sortByKey<T>(object: Record<string, T>): Record<string, T> {
+  return Object.fromEntries(Object.entries(object).sort());
 }

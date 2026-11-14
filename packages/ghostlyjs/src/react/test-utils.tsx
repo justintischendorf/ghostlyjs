@@ -5,7 +5,7 @@ import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { vi, type Mock } from "vitest";
 
-import type { GhostBoxMeasurement } from "../core/types";
+import type { GhostBoxMeasurement, GhostlyEntry } from "../core/types";
 
 // Tells React that updates are wrapped in `act`, so it doesn't warn.
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -94,3 +94,9 @@ export const card: GhostBoxMeasurement = {
     { x: 190, y: -5, width: 20, height: 20, radius: 10 },
   ],
 };
+
+// An entry measured at one breakpoint only. With nothing else measured, it
+// shows at every window width.
+export function everywhere(measurement: GhostBoxMeasurement): GhostlyEntry {
+  return { base: measurement };
+}
