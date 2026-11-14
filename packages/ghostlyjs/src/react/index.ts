@@ -3,3 +3,5 @@
 
 export { Ghostly } from "./ghostly";
 export type { GhostlyProps, GhostlyVariant } from "./types";
+export { GhostlyProvider } from "./ghostly-provider";
+export type { GhostlyProviderProps } from "./types";
