@@ -8,6 +8,8 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-15
+
 ### Added
 
 - `<Ghost>` component: shows its children once `isLoading` is false,
@@ -20,14 +22,15 @@ and this project adheres to
   when measured (`count` without a value). Works while the data is still
   missing, and the list's gap and grid apply to the skeletons. The
   playgrounds use it for the team grid and the posts that load for real.
+  ([#25])
 - `data-ghost` attribute with the name on the content wrapper and the
-  skeletons, to find a `<Ghost>` in the browser's dev tools.
+  skeletons, to find a `<Ghost>` in the browser's dev tools. ([#25])
 - Responsive skeletons: a `<Ghost>` is measured once per breakpoint
   (Tailwind's by default, others with the `breakpoints` prop of
   `<GhostlyProvider>`), and CSS media queries show the skeleton for the
   current window width. The server renders the same HTML as the browser,
   so there are no hydration errors. A breakpoint that was never measured
-  uses the next smaller measured one.
+  uses the next smaller measured one. ([#26])
 - Measuring in dev mode: `<Ghost>` measures the real rendered content (text
   lines, surfaces, images, icons, form controls, Shadow DOM) instead of
   using predefined variants. Production builds don't measure. ([#15])
@@ -38,7 +41,7 @@ and this project adheres to
   logo, each update with the time, and a clear message when the port is
   already in use (e.g. by a second `ghostly dev`). When it isn't running,
   the browser console shows one hint per page load how to save the
-  measurements. ([#17])
+  measurements. ([#17], [#31])
 - `ghostly measure <url>` command: opens every page of the running app in a
   headless browser at every breakpoint, waits until each `<Ghost>` shows
   its content and writes the measurements to `ghostly.json`. So nobody has
@@ -51,20 +54,20 @@ and this project adheres to
   how many pages are known so far. A production build is reported right
   away instead of after visiting every page: `<GhostlyProvider>` marks dev
   mode (`data-ghostly-dev` on its style tag). Ctrl+C ends with a closing
-  line.
+  line. ([#27], [#31])
 - Output of the `ghostly` commands with `@clack/prompts`: the logo, colors
   (only in a terminal and without `NO_COLOR`), one line per step and a
   closing line. Problems the user can fix, like a missing URL, an unknown
   option or a broken `ghostly.json` (e.g. after a merge conflict), are a
   short message instead of a stack trace; a broken file is reported
   before measuring and never overwritten. `ghostly --help` and
-  `ghostly --version` (also `-h` and `-v`).
+  `ghostly --version` (also `-h` and `-v`). ([#31])
 - `isMeasuring()`: true in the browser of `ghostly measure`, for content
-  that only shows after a click (the playgrounds' loading toggle).
+  that only shows after a click (the playgrounds' loading toggle). ([#27])
 - The package names Node 20.12 as the minimum (`engines`), the version
   `@clack/prompts` needs for the output of the commands. So npm warns on
   install instead of the command failing later. Bun ignores `engines`;
-  both commands also run with Bun 1.1.11 or newer.
+  both commands also run with Bun 1.1.11 or newer. ([#28], [#31], [#34])
 - A single placeholder bar for a `<Ghost>` that was never measured. ([#19])
 - Pulse animation on skeletons, turned off when the user prefers reduced
   motion. `<GhostlyProvider>` adds the styles, so no stylesheet needs to
@@ -72,11 +75,11 @@ and this project adheres to
 - Package entries: `ghostlyjs` (React), `ghostlyjs/core` and the `ghostly`
   command, built with tsdown. ([#13]) The entries also load with
   `require()` in Node versions that can require ES modules (20.19+,
-  22.12+). The package contains the README and the license, so npm shows
-  them.
+  22.12+). ([#31]) The package contains the README and the license, so
+  npm shows them. ([#34])
 - Logo: a smiling, floating ghost whose eyes blink (not with reduced
   motion). Shown at the top of the README, from an absolute URL so it
-  also shows on npm. ([#20])
+  also shows on npm. ([#20], [#30])
 - Next.js playground with pages for common layouts, real async loading,
   edge cases and a light/dark toggle. ([#14], [#18], [#20], [#21])
 - Vite playground with the same pages on React 18.0.0, the oldest React
@@ -84,31 +87,32 @@ and this project adheres to
 - The playgrounds are responsive at every Tailwind breakpoint (`sm` to
   `2xl`): each page changes its layout, and the content gets wider at each
   one, so every breakpoint has its own measurement to test. The nav shows
-  the current breakpoint.
+  the current breakpoint. ([#29])
 - Unit tests with Vitest for the measuring code, `<Ghost>` and
   `<GhostlyProvider>` (in dev mode and in production) and the
   `ghostly dev` collector. The browser parts run in Chromium, because the
-  measuring reads the real layout.
+  measuring reads the real layout. ([#24])
 - E2E tests with Playwright: in both playgrounds, at a phone width and the
   smallest width of every breakpoint, each skeleton must cover the same area as its content, box by
   box, also on the page that loads for real. Unit and e2e tests run in CI.
+  ([#24], [#26], [#29])
 - Linting and formatting with oxlint and oxfmt, CI checks, PR template and
   Dependabot. ([#4], [#5], [#9], [#11])
-- README with installation, a quick start for Next.js and Vite, the
-  usage of `<Ghost>` (lists, Suspense, breakpoints, `isMeasuring()`), both
-  commands and their options, the API, styling and troubleshooting.
+- README with the requirements, installation, a quick start for Next.js
+  and Vite with both commands and their options, the usage of `<Ghost>`
+  (lists, Suspense, breakpoints), styling and troubleshooting. ([#34])
 - MIT license and security policy. ([#7], [#12])
 
 ### Changed
 
 - `ghostly.json` stores the measurements of each `<Ghost>` per breakpoint:
   `{ "name": { "xl": { ... } } }` instead of `{ "name": { ... } }`. Files
-  from before have to be measured again.
+  from before have to be measured again. ([#26])
 
 ### Fixed
 
 - `<Ghost>` measures again when a web font arrives after its content
-  showed, so text isn't measured with the fallback font.
+  showed, so text isn't measured with the fallback font. ([#27])
 - More accurate skeletons: centered and right-aligned content, height of
   text-only content, divider borders no longer drawn as surfaces, text
   split into pieces joined per line, no text bars inside filled circles,
@@ -117,7 +121,7 @@ and this project adheres to
 - Text bars of lines below each other no longer overlap (headings with a
   tight `line-height` like `leading-none`) or touch (the usual line
   heights): each bar takes 80% of its line, so a gap stays like between
-  the letters.
+  the letters. ([#33])
 - The placeholder package can be published to npm. ([#3])
 
 ### Removed
@@ -132,7 +136,8 @@ and this project adheres to
 - Placeholder package `ghostlyjs` on npm to reserve the name. Not usable yet.
   ([#1], [#2])
 
-[Unreleased]: https://github.com/justintischendorf/ghostlyjs/compare/v0.0.1...HEAD
+[Unreleased]: https://github.com/justintischendorf/ghostlyjs/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/justintischendorf/ghostlyjs/compare/v0.0.1...v0.1.0
 [0.0.1]: https://github.com/justintischendorf/ghostlyjs/releases/tag/v0.0.1
 [#1]: https://github.com/justintischendorf/ghostlyjs/pull/1
 [#2]: https://github.com/justintischendorf/ghostlyjs/pull/2
@@ -154,3 +159,13 @@ and this project adheres to
 [#21]: https://github.com/justintischendorf/ghostlyjs/pull/21
 [#22]: https://github.com/justintischendorf/ghostlyjs/pull/22
 [#23]: https://github.com/justintischendorf/ghostlyjs/pull/23
+[#24]: https://github.com/justintischendorf/ghostlyjs/pull/24
+[#25]: https://github.com/justintischendorf/ghostlyjs/pull/25
+[#26]: https://github.com/justintischendorf/ghostlyjs/pull/26
+[#27]: https://github.com/justintischendorf/ghostlyjs/pull/27
+[#28]: https://github.com/justintischendorf/ghostlyjs/pull/28
+[#29]: https://github.com/justintischendorf/ghostlyjs/pull/29
+[#30]: https://github.com/justintischendorf/ghostlyjs/pull/30
+[#31]: https://github.com/justintischendorf/ghostlyjs/pull/31
+[#33]: https://github.com/justintischendorf/ghostlyjs/pull/33
+[#34]: https://github.com/justintischendorf/ghostlyjs/pull/34
