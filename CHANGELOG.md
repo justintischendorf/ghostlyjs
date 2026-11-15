@@ -64,7 +64,7 @@ and this project adheres to
 - The package names Node 20.12 as the minimum (`engines`), the version
   `@clack/prompts` needs for the output of the commands. So npm warns on
   install instead of the command failing later. Bun ignores `engines`;
-  both commands also run with Bun.
+  both commands also run with Bun 1.1.11 or newer.
 - A single placeholder bar for a `<Ghost>` that was never measured. ([#19])
 - Pulse animation on skeletons, turned off when the user prefers reduced
   motion. `<GhostlyProvider>` adds the styles, so no stylesheet needs to
@@ -93,6 +93,9 @@ and this project adheres to
   box, also on the page that loads for real. Unit and e2e tests run in CI.
 - Linting and formatting with oxlint and oxfmt, CI checks, PR template and
   Dependabot. ([#4], [#5], [#9], [#11])
+- README with installation, a quick start for Next.js and Vite, the
+  usage of `<Ghost>` (lists, Suspense, breakpoints, `isMeasuring()`), both
+  commands and their options, the API, styling and troubleshooting.
 - MIT license and security policy. ([#7], [#12])
 
 ### Changed
