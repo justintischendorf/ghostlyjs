@@ -4,7 +4,6 @@ import "./globals.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
-// The repo logo, shared with the README (no copy in public/).
 import logo from "../../../assets/logo.svg";
 import App from "./app";
 

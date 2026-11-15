@@ -4,7 +4,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-// The repo logo, shared with the README (no copy in public/).
 import logo from "../../../assets/logo.svg";
 import { LoadingToggle } from "./loading";
 import ThemeToggle from "./theme-toggle";

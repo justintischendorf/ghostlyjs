@@ -1,16 +1,19 @@
-# 👻 GhostlyJs
+<div align="center">
 
-**Auto-generate skeleton loaders for React by measuring your real UI.**
-No more hand-written skeletons.
+<img src="https://raw.githubusercontent.com/justintischendorf/ghostlyjs/main/assets/logo.svg" width="128" alt="" />
+
+<h1>GhostlyJs</h1>
+
+<p>
+  <strong>Skeleton loaders for React that measure your real UI.</strong>
+  <br />
+  No more hand-written skeletons.
+</p>
+
+</div>
 
 > 🚧 **Coming soon.** GhostlyJs is in early development and not usable yet.
 
-## What it does
-
-GhostlyJs measures your components while you use your app in development
-and generates skeleton loaders that match your real layout. No more
-writing and maintaining them by hand.
-
 ## License
 
-MIT
+[MIT](https://github.com/justintischendorf/ghostlyjs/blob/main/LICENSE)
