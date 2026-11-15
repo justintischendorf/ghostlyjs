@@ -384,14 +384,15 @@ describe.concurrent("ghostly measure", { timeout: 60_000 }, () => {
   });
 
   test("a production build: stops right away, writes nothing", async () => {
-    const start = Date.now();
     const { code, output, data } = await measure([`${origin}/prod`]);
     expect(code).toBe(1);
     expect(output).toContain("This is a production build");
     expect(output).toContain("dev mode");
-    // No page was measured (they would take seconds each).
+    // Stopped before measuring: no line with the breakpoints' widths, no
+    // page reported. Not timed, because starting the browser alone takes
+    // seconds on slow machines like CI.
+    expect(output).not.toContain(" · ");
     expect(output).not.toContain("never showed its content");
-    expect(Date.now() - start).toBeLessThan(3000);
     expect(data).toBeUndefined();
   });
 
