@@ -8,10 +8,22 @@ const playgrounds = [
   { name: "next", port: 3000, cwd: "../playground-next" },
 ];
 
-// A desktop and a phone window, so the skeletons are checked at two widths.
+// A window in every breakpoint range (Tailwind's), at its smallest width
+// like `ghostly measure`: the playgrounds change their layout at each one.
+// `base` is a real phone (touch, device pixel ratio), the others desktop.
+const desktop = devices["Desktop Chrome"];
+const atWidth = (width: number) => ({
+  ...desktop,
+  viewport: { ...desktop.viewport, width },
+});
 const screens = [
-  { name: "desktop", device: devices["Desktop Chrome"] },
   { name: "mobile", device: devices["Pixel 7"] },
+  { name: "sm", device: atWidth(640) },
+  { name: "md", device: atWidth(768) },
+  { name: "lg", device: atWidth(1024) },
+  // Desktop Chrome is 1280 wide.
+  { name: "desktop", device: desktop },
+  { name: "2xl", device: atWidth(1536) },
 ];
 
 export default defineConfig({

@@ -22,7 +22,7 @@ export default function Async() {
   return (
     <>
       <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold">Async</h1>
+        <h1 className="text-2xl font-bold sm:text-3xl">Async</h1>
         <p className="text-muted">
           Real loading instead of the toggle. Reload the page to see the
           skeletons again.
@@ -62,15 +62,16 @@ function Profile() {
 
   return (
     <Ghost name="async-server" isLoading={false}>
-      <div className="flex flex-col gap-4 rounded-2xl border border-border p-6">
-        <div className="flex items-center gap-3">
+      {/* The text moves next to the author from md on */}
+      <div className="flex flex-col gap-4 rounded-2xl border border-border p-4 sm:p-6 md:flex-row md:items-center md:gap-8">
+        <div className="flex shrink-0 items-center gap-3">
           <div className="size-12 shrink-0 rounded-full bg-accent" />
           <div>
             <p className="font-semibold">{post.author}</p>
             <p className="text-sm text-muted">Loaded in the browser</p>
           </div>
         </div>
-        <p>{post.text}</p>
+        <p className="xl:text-lg">{post.text}</p>
       </div>
     </Ghost>
   );

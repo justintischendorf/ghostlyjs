@@ -258,19 +258,20 @@ export default function EdgeCases() {
   return (
     <>
       <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold">Edge cases</h1>
+        <h1 className="text-2xl font-bold sm:text-3xl">Edge cases</h1>
         <p className="text-muted">
           Small cases the measuring has to handle. The title stays visible, only
           the part below it is wrapped in a Ghost.
         </p>
       </div>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {/* 1, 2, 3, then 4 columns */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:gap-6">
         {cases.map((item) => (
           <div
             key={item.name}
             // `min-w-0`: long unwrapped text (truncate) must not widen the
             // grid column.
-            className="flex min-w-0 flex-col gap-3 rounded-2xl border border-border p-5"
+            className="flex min-w-0 flex-col gap-3 rounded-2xl border border-border p-4 md:p-5"
           >
             <h2 className="text-sm font-medium text-muted">{item.title}</h2>
             <Ghost

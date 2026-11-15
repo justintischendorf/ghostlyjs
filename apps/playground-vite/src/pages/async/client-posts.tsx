@@ -28,17 +28,20 @@ export default function ClientPosts() {
 
   return (
     <div className="flex flex-col gap-3">
-      <Ghost name="async-client-posts" isLoading={isLoading} count={3}>
-        {loaded.map((post) => (
-          <div
-            key={post.author}
-            className="flex flex-col gap-1 rounded-2xl border border-border p-5"
-          >
-            <p className="font-semibold">{post.author}</p>
-            <p className="text-muted">{post.text}</p>
-          </div>
-        ))}
-      </Ghost>
+      {/* The skeletons are items of this grid: 1, 2, then 3 columns */}
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:gap-4">
+        <Ghost name="async-client-posts" isLoading={isLoading} count={3}>
+          {loaded.map((post) => (
+            <div
+              key={post.author}
+              className="flex flex-col gap-1 rounded-2xl border border-border p-4 sm:p-5"
+            >
+              <p className="font-semibold">{post.author}</p>
+              <p className="text-muted">{post.text}</p>
+            </div>
+          ))}
+        </Ghost>
+      </div>
       <button
         type="button"
         onClick={reload}
