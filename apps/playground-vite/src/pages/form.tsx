@@ -9,13 +9,15 @@ export default function Form() {
 
   return (
     <>
-      <h1 className="text-3xl font-bold">Form</h1>
+      <h1 className="text-2xl font-bold sm:text-3xl">Form</h1>
 
-      <div className="grid gap-8 lg:grid-cols-[1fr_300px]">
+      {/* The help moves next to the form from lg on and gets wider */}
+      <div className="grid gap-6 sm:gap-8 lg:grid-cols-[1fr_280px] xl:grid-cols-[1fr_340px] 2xl:grid-cols-[1fr_400px]">
         {/* Inputs, textarea, select, checkbox, radio and buttons */}
         <Ghost name="form-fields" isLoading={isLoading}>
-          <form className="flex flex-col gap-5 rounded-2xl border border-border p-6">
-            <div className="grid gap-5 sm:grid-cols-2">
+          <form className="flex flex-col gap-5 rounded-2xl border border-border p-4 sm:p-6 xl:p-8">
+            {/* 1, 2, then 3 columns */}
+            <div className="grid gap-5 sm:grid-cols-2 2xl:grid-cols-3">
               <label className="flex flex-col gap-2 text-sm font-medium">
                 First name
                 <input className={field} placeholder="Ada" />
@@ -24,19 +26,19 @@ export default function Form() {
                 Last name
                 <input className={field} placeholder="Lovelace" />
               </label>
+              <label className="flex flex-col gap-2 text-sm font-medium sm:col-span-2 2xl:col-span-1">
+                Role
+                <select className={field}>
+                  <option>Engineer</option>
+                  <option>Designer</option>
+                </select>
+              </label>
             </div>
-            <label className="flex flex-col gap-2 text-sm font-medium">
-              Role
-              <select className={field}>
-                <option>Engineer</option>
-                <option>Designer</option>
-              </select>
-            </label>
             <label className="flex flex-col gap-2 text-sm font-medium">
               About you
               <textarea className={field} rows={4} placeholder="Tell us…" />
             </label>
-            <div className="flex flex-wrap gap-5 text-sm">
+            <div className="flex flex-col gap-3 text-sm sm:flex-row sm:gap-5">
               <label className="flex items-center gap-2">
                 <input type="checkbox" defaultChecked /> Newsletter
               </label>
@@ -51,7 +53,8 @@ export default function Form() {
               Volume
               <input type="range" />
             </label>
-            <div className="flex justify-end gap-3">
+            {/* Full-width buttons on phones, Save on top */}
+            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
               <button
                 type="button"
                 className="rounded-full border border-border px-5 py-2"
@@ -69,7 +72,7 @@ export default function Form() {
         </Ghost>
 
         <Ghost name="form-help" isLoading={isLoading}>
-          <aside className="flex flex-col gap-3 rounded-2xl bg-card p-6">
+          <aside className="flex flex-col gap-3 rounded-2xl bg-card p-4 sm:p-6">
             <h2 className="font-semibold">Why we ask</h2>
             <p className="text-sm text-muted">
               Native form controls are measured as one box each. Their inner

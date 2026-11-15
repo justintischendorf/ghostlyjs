@@ -34,7 +34,7 @@ test("ghostly measure measures every page at every breakpoint", async ({
   baseURL,
 }, testInfo) => {
   // The command opens its own browser and windows; once per playground.
-  test.skip(testInfo.project.name.endsWith("mobile"), "once per playground");
+  test.skip(!testInfo.project.name.endsWith("desktop"), "once per playground");
   test.setTimeout(240_000);
 
   const folder = mkdtempSync(join(tmpdir(), "ghostly-e2e-"));
@@ -53,10 +53,14 @@ test("ghostly measure measures every page at every breakpoint", async ({
     for (const name of playgroundGhosts) {
       expect(Object.keys(data[name]), name).toEqual(BREAKPOINTS);
     }
-    // Different layouts per width: the hero text wraps more on a phone.
-    expect(data["home-hero"].base.height).toBeGreaterThan(
-      data["home-hero"].xl.height,
-    );
+    // Different layouts per width: the playgrounds' content is narrower or
+    // wider at every breakpoint, so each one has its own measurement.
+    const hero = data["home-hero"];
+    expect(
+      new Set(BREAKPOINTS.map((breakpoint) => hero[breakpoint].width)).size,
+    ).toBe(BREAKPOINTS.length);
+    // And the cover next to the hero text only shows from lg on.
+    expect(hero.lg.boxes.length).toBeGreaterThan(hero.md.boxes.length);
     // Also the ones that load for real.
     expect(output).toMatch(/\/async +✓ 2 ghosts/);
     // The playground's <Ghost> that never loads, on purpose.

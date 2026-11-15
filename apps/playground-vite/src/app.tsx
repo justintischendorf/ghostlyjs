@@ -34,7 +34,9 @@ export default function App() {
     <GhostlyProvider data={data}>
       <LoadingProvider>
         <Nav />
-        <main className="mx-auto flex w-full max-w-6xl flex-col gap-12 px-4 py-10 sm:px-8 sm:py-14">
+        {/* Full width up to 2xl with more padding per breakpoint, so the
+            content is narrower or wider at every breakpoint. */}
+        <main className="mx-auto flex w-full max-w-384 flex-col gap-10 px-4 py-8 sm:px-6 sm:py-10 md:gap-12 md:px-8 lg:py-14 xl:px-10 2xl:px-12">
           <Page />
         </main>
       </LoadingProvider>
