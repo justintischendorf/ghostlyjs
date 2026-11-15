@@ -62,7 +62,7 @@ test("ghostly measure measures every page at every breakpoint", async ({
     // And the cover next to the hero text only shows from lg on.
     expect(hero.lg.boxes.length).toBeGreaterThan(hero.md.boxes.length);
     // Also the ones that load for real.
-    expect(output).toMatch(/\/async +✓ 2 ghosts/);
+    expect(output).toMatch(/\/async +2 ghosts/);
     // The playground's <Ghost> that never loads, on purpose.
     expect(output).toContain('"edge-never-measured" never showed its content');
   } finally {

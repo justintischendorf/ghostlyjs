@@ -120,6 +120,17 @@ describe("measuring per breakpoint", () => {
   });
 });
 
+describe("dev mode mark", () => {
+  // `ghostly measure` reads it to tell dev mode from a production build.
+  test("the provider marks dev mode", async () => {
+    const { container } = await render(
+      <GhostlyProvider data={{}}>{null}</GhostlyProvider>,
+    );
+    const style = container.querySelector("style[data-ghostly-breakpoints]");
+    expect(style?.hasAttribute("data-ghostly-dev")).toBe(true);
+  });
+});
+
 describe("server rendering", () => {
   test("the server renders the same HTML as the browser", async () => {
     const ui = (

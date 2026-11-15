@@ -34,7 +34,11 @@ and this project adheres to
 - Skeletons draw the measured boxes, adapt to the available width and work
   in light and dark mode. ([#16], [#17])
 - `ghostly dev` command: a local collector that receives the measurements
-  from the browser and writes them to `ghostly.json`. ([#17])
+  from the browser and writes them to `ghostly.json`. Its output shows the
+  logo, each update with the time, and a clear message when the port is
+  already in use (e.g. by a second `ghostly dev`). When it isn't running,
+  the browser console shows one hint per page load how to save the
+  measurements. ([#17])
 - `ghostly measure <url>` command: opens every page of the running app in a
   headless browser at every breakpoint, waits until each `<Ghost>` shows
   its content and writes the measurements to `ghostly.json`. So nobody has
@@ -43,18 +47,32 @@ and this project adheres to
   showed its content, and `--prune` removes ghosts no page showed. It
   uses the installed Chrome or Edge, so nothing has to be downloaded
   (`playwright-core` is a dependency of the package, without browsers).
+  In a terminal, a spinner shows the page, a bar of its breakpoints and
+  how many pages are known so far. A production build is reported right
+  away instead of after visiting every page: `<GhostlyProvider>` marks dev
+  mode (`data-ghostly-dev` on its style tag). Ctrl+C ends with a closing
+  line.
+- Output of the `ghostly` commands with `@clack/prompts`: the logo, colors
+  (only in a terminal and without `NO_COLOR`), one line per step and a
+  closing line. Problems the user can fix, like a missing URL, an unknown
+  option or a broken `ghostly.json` (e.g. after a merge conflict), are a
+  short message instead of a stack trace; a broken file is reported
+  before measuring and never overwritten. `ghostly --help` and
+  `ghostly --version` (also `-h` and `-v`).
 - `isMeasuring()`: true in the browser of `ghostly measure`, for content
   that only shows after a click (the playgrounds' loading toggle).
-- The package names Node 20 as the minimum (`engines`), the version
-  `playwright-core` needs for `ghostly measure`. So npm warns on install
-  instead of the command failing later. Bun ignores `engines`; both
-  commands also run with Bun.
+- The package names Node 20.12 as the minimum (`engines`), the version
+  `@clack/prompts` needs for the output of the commands. So npm warns on
+  install instead of the command failing later. Bun ignores `engines`;
+  both commands also run with Bun.
 - A single placeholder bar for a `<Ghost>` that was never measured. ([#19])
 - Pulse animation on skeletons, turned off when the user prefers reduced
   motion. `<GhostlyProvider>` adds the styles, so no stylesheet needs to
   be imported. ([#21])
 - Package entries: `ghostlyjs` (React), `ghostlyjs/core` and the `ghostly`
-  command, built with tsdown. ([#13])
+  command, built with tsdown. ([#13]) The entries also load with
+  `require()` in Node versions that can require ES modules (20.19+,
+  22.12+).
 - Logo: a smiling, floating ghost whose eyes blink (not with reduced
   motion). Shown at the top of the README, from an absolute URL so it
   also shows on npm. ([#20])

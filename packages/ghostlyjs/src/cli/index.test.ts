@@ -68,12 +68,12 @@ async function startCollector(existing?: string) {
     writeFileSync(join(folder, "ghostly.json"), existing);
   }
   await waitFor(() => {
-    if (started.output().includes("EADDRINUSE")) {
+    if (started.output().includes("is in use")) {
       throw new Error(
         `port ${DEFAULT_PORT} is in use. Is \`ghostly dev\` running? Stop it for the tests.`,
       );
     }
-    return started.output().includes("listening");
+    return started.output().includes("Listening");
   });
   return started;
 }
@@ -127,6 +127,23 @@ describe("command line", () => {
     expect(output()).toMatch(/ghostly dev .*\n.*ghostly measure <url>/);
   });
 
+  test.each(["--help", "-h"])("%s prints the usage", async (flag) => {
+    const { process, output } = run(flag);
+    const code = await new Promise((done) => process.once("exit", done));
+    expect(code).toBe(0);
+    expect(output()).toMatch(/ghostly dev .*\n.*ghostly measure <url>/);
+  });
+
+  test.each(["--version", "-v"])("%s prints the version", async (flag) => {
+    const { version } = JSON.parse(
+      readFileSync(resolve(import.meta.dirname, "../../package.json"), "utf8"),
+    );
+    const { process, output } = run(flag);
+    const code = await new Promise((done) => process.once("exit", done));
+    expect(code).toBe(0);
+    expect(output().trim()).toBe(version);
+  });
+
   test("an unknown command prints the usage and fails", async () => {
     const { process, output } = run("nope");
     const code = await new Promise((done) => process.once("exit", done));
@@ -136,6 +153,39 @@ describe("command line", () => {
 });
 
 describe("ghostly dev", () => {
+  test("a broken ghostly.json is an error, not a crash", async () => {
+    folder = mkdtempSync(join(tmpdir(), "ghostly-test-"));
+    writeFileSync(join(folder, "ghostly.json"), "<<<<<<< HEAD\n");
+    child = spawn(runtime, [cli, "dev"], { cwd: folder });
+    let output = "";
+    child.stdout?.on("data", (chunk) => (output += chunk));
+    child.stderr?.on("data", (chunk) => (output += chunk));
+    const code = await new Promise((done) => child?.once("exit", done));
+    expect(code).toBe(1);
+    expect(output).toContain("ghostly.json is broken");
+    expect(output).not.toContain("SyntaxError");
+    // The broken file stays as it was, nothing is lost.
+    expect(readFileSync(file(), "utf8")).toBe("<<<<<<< HEAD\n");
+  });
+
+  test("a second one explains that the port is in use", async () => {
+    const first = await startCollector();
+    const firstFolder = folder;
+    const firstChild = child;
+    const second = run("dev");
+    const code = await new Promise((done) => second.process.once("exit", done));
+    expect(code).toBe(1);
+    expect(second.output()).toContain(
+      `Port ${DEFAULT_PORT} is in use. Is \`ghostly dev\` already running?`,
+    );
+    expect(second.output()).not.toContain("EADDRINUSE");
+    // The first one keeps running; stopped by afterEach like any other.
+    expect(first.process.exitCode).toBeNull();
+    rmSync(folder, { recursive: true, force: true });
+    folder = firstFolder;
+    child = firstChild;
+  });
+
   // Bun ignores `engines` and may run the command instead of Node.
   test("runs with Bun too", async () => {
     runtime = "bun";

@@ -6,11 +6,13 @@
 
 import { parseArgs } from "node:util";
 
+import { intro, log, outro } from "@clack/prompts";
 import type { Browser, BrowserContext, BrowserType } from "playwright-core";
 
 import { DEFAULT_BREAKPOINTS, rangesOf } from "../core/breakpoints";
 import { DEFAULT_PORT, MEASURE_FLAG } from "../core/index";
 import type { Breakpoints, GhostlyData } from "../core/types";
+import { CliError } from "./cli-error";
 import {
   ghostlyFile,
   isMeasurementMessage,
@@ -18,15 +20,7 @@ import {
   sortByKey,
   writeGhostlyFile,
 } from "./ghostly-file";
-
-// A message for the user instead of a stack trace.
-export class CliError extends Error {
-  showUsage: boolean;
-  constructor(message: string, showUsage = false) {
-    super(message);
-    this.showUsage = showUsage;
-  }
-}
+import { bar, header, progressLine, style } from "./style";
 
 export type MeasureCommandOptions = {
   url: string;
@@ -60,7 +54,15 @@ export function parseOptions(args: string[]): MeasureCommandOptions {
       },
     });
   } catch (error) {
-    throw new CliError((error as Error).message, true);
+    // Node's own text is long; the option is all the user needs.
+    const { code, message } = error as { code?: string; message: string };
+    const option = /'([^']+)'/.exec(message)?.[1];
+    throw new CliError(
+      code === "ERR_PARSE_ARGS_UNKNOWN_OPTION" && option
+        ? `Unknown option "${option}".`
+        : message,
+      true,
+    );
   }
   const { positionals, values } = parsed;
   const [url] = positionals;
@@ -131,9 +133,18 @@ export function mergeMeasurements(
   return sortByKey(result);
 }
 
+// "1 ghost", "2 ghosts".
+const plural = (count: number, word: string) =>
+  `${count} ${word}${count === 1 ? "" : "s"}`;
+
 export async function runMeasure(args: string[]): Promise<void> {
+  console.log(header("ghostly measure"));
+  intro("Measuring every page at every breakpoint");
   const options = parseOptions(args);
   const origin = new URL(options.url).origin;
+  // A broken ghostly.json fails now, not after measuring every page. It is
+  // read again at the end: `ghostly dev` may write to it meanwhile.
+  readGhostlyFile(ghostlyFile());
 
   try {
     await fetch(options.url);
@@ -143,9 +154,22 @@ export async function runMeasure(args: string[]): Promise<void> {
     );
   }
 
+  // Shows what is going on while measuring; in a terminal only.
+  const progress = progressLine();
+  // Ctrl+C: a closing line instead of errors from the closing browser.
+  // Registered before the spinner's own handler, so this one runs first.
+  process.once("SIGINT", () => {
+    progress.hide();
+    outro("Stopped");
+    process.exit(130);
+  });
+  progress.show("Starting the browser");
   // Loaded only here, so `ghostly dev` starts without it.
   const { chromium } = await import("playwright-core");
-  const browser = await launchBrowser(chromium);
+  const browser = await launchBrowser(chromium).catch((error: unknown) => {
+    progress.hide();
+    throw error;
+  });
   try {
     const context = await browser.newContext();
     // Lets the app know (`isMeasuring()`) before any of its code runs.
@@ -154,8 +178,10 @@ export async function runMeasure(args: string[]): Promise<void> {
     // that isn't measured (reading the breakpoints). The pages that are
     // measured catch them with their own route, which wins over this one.
     await context.route(isCollector, (route) => route.fulfill({ status: 204 }));
-    await measureApp(context, origin, options);
+    await measureApp(context, origin, options, progress);
   } finally {
+    // An error ends the output; the spinner must not stay above it.
+    progress.hide();
     await browser.close();
   }
 }
@@ -181,14 +207,30 @@ async function measureApp(
   context: BrowserContext,
   origin: string,
   options: MeasureCommandOptions,
+  progress: ReturnType<typeof progressLine>,
 ): Promise<void> {
   const start = pageOf(options.url, origin) ?? "/";
-  const breakpoints = await readBreakpoints(context, origin + start);
+  progress.show("Reading the breakpoints");
+  const { breakpoints, production } = await readBreakpoints(
+    context,
+    origin + start,
+  );
+  // Known right away from <GhostlyProvider>; no need to visit every page.
+  if (production) {
+    throw new CliError(
+      "This is a production build, and <Ghost> only measures in dev mode.\n" +
+        "Start your dev server (e.g. `npm run dev`) and measure that.",
+    );
+  }
   const widths = widthsOf(breakpoints);
+  progress.hide();
 
-  console.log(`ghostly measure  ${origin}`);
-  console.log(
-    `breakpoints      ${widths.map(({ name, width }) => `${name} ${width}`).join(" · ")}\n`,
+  log.info(
+    `${style("cyan", origin)}\n` +
+      style(
+        "dim",
+        widths.map(({ name, width }) => `${name} ${width}`).join(" · "),
+      ),
   );
 
   const queue = [start];
@@ -202,13 +244,19 @@ async function measureApp(
   const seen = new Set<string>();
   const incomplete = new Set<string>();
 
-  for (const path of queue) {
+  for (const [index, path] of queue.entries()) {
     const ghosts = new Set<string>();
     // Breakpoints each <Ghost> of this page was measured at.
     const measuredAt = new Map<string, Set<string>>();
     let error: string | undefined;
 
-    for (const { width } of widths) {
+    for (const [step, { name: breakpoint, width }] of widths.entries()) {
+      // E.g. "/feed  ▰▰▰▱▱▱ md  page 2 of 7". The number of pages grows
+      // while links are found.
+      progress.show(
+        `${path}  ${bar(step + 1, widths.length)} ${breakpoint}  ` +
+          style("dim", `page ${index + 1} of ${queue.length}`),
+      );
       const visit = await visitPage(context, origin + path, width, options);
       if (visit.error) {
         error = visit.error;
@@ -231,8 +279,11 @@ async function measureApp(
       if (ghosts.size === 0) break;
     }
 
+    progress.hide();
+    // At least two spaces, also after a path longer than the column.
+    const column = `${path.padEnd(PATH_COLUMN - 2)}  `;
     if (error) {
-      console.log(`  ${path.padEnd(PATH_COLUMN)} ⚠ ${error}`);
+      log.warn(`${column}${error}`);
       continue;
     }
     for (const name of ghosts) seen.add(name);
@@ -251,27 +302,29 @@ async function measureApp(
           : `"${name}" never showed its content`,
       );
     }
-    const done = ghosts.size - problems.length;
-    const count = `${ghosts.size} ghost${ghosts.size === 1 ? "" : "s"}`;
-    console.log(
-      problems.length === 0
-        ? `  ${path.padEnd(PATH_COLUMN)} ✓ ${count}`
-        : `  ${path.padEnd(PATH_COLUMN)} ⚠ ${done} of ${count}`,
-    );
-    for (const problem of problems) console.log(`      ${problem}`);
+    const count = plural(ghosts.size, "ghost");
+    if (problems.length === 0) {
+      log.success(`${column}${count}`);
+    } else {
+      const done = ghosts.size - problems.length;
+      log.warn(
+        `${column}${done} of ${count}\n` +
+          problems.map((problem) => style("dim", problem)).join("\n"),
+      );
+    }
   }
 
   if (skippedPages > 0) {
-    console.log(
-      `\n⚠ Stopped following links after ${options.maxPages} pages ` +
-        "(--max-pages).",
+    log.warn(
+      `Stopped following links after ${options.maxPages} pages ` +
+        style("dim", "(--max-pages)"),
     );
   }
   const names = Object.keys(measured);
   if (names.length === 0) {
     throw new CliError(
       seen.size === 0
-        ? `No <Ghost> found on ${queue.length} page${queue.length === 1 ? "" : "s"}.`
+        ? `No <Ghost> found on ${plural(queue.length, "page")}.`
         : "No <Ghost> sent a measurement. Is the app running in dev mode? " +
             "Production builds don't measure.",
     );
@@ -285,31 +338,32 @@ async function measureApp(
   });
   writeGhostlyFile(file, data);
 
-  console.log(
-    `\n✓ ${names.length} ghost${names.length === 1 ? "" : "s"} measured ` +
-      `at ${widths.length} breakpoints → ghostly.json`,
-  );
   const removed = Object.keys(before).filter((name) => !(name in data));
   if (removed.length > 0) {
-    console.log(
-      `✓ removed ${removed.length} ghost${removed.length === 1 ? "" : "s"} ` +
-        "no page showed: " +
+    log.success(
+      `Removed ${plural(removed.length, "ghost")} no page showed: ` +
         removed.map((name) => `"${name}"`).join(", "),
     );
   }
   if (incomplete.size > 0) {
-    console.log(
-      `⚠ ${incomplete.size} ghost${incomplete.size === 1 ? "" : "s"} not ` +
-        "measured everywhere. Open them by hand with `ghostly dev` running.",
+    log.warn(
+      `${plural(incomplete.size, "ghost")} not measured everywhere.\n` +
+        style("dim", "Open them by hand with `ghostly dev` running."),
     );
   }
+  outro(
+    `${plural(names.length, "ghost")} measured at ` +
+      `${plural(widths.length, "breakpoint")} → ${style("cyan", "ghostly.json")}`,
+  );
 }
 
-// The breakpoints of the app's <GhostlyProvider>, or the defaults.
+// The breakpoints of the app's <GhostlyProvider>, or the defaults, and
+// whether it is a production build (the provider marks dev mode). Without a
+// provider that's unknown.
 async function readBreakpoints(
   context: BrowserContext,
   url: string,
-): Promise<Breakpoints> {
+): Promise<{ breakpoints: Breakpoints; production: boolean }> {
   const page = await context.newPage();
   try {
     const response = await page.goto(url);
@@ -318,14 +372,18 @@ async function readBreakpoints(
     }
     // Rendered by the app's code, which may need a moment (client
     // rendering).
-    const style = await page
+    const tag = await page
       .waitForSelector("style[data-ghostly-breakpoints]", {
         state: "attached",
         timeout: 5000,
       })
       .catch(() => null);
-    const value = await style?.getAttribute("data-ghostly-breakpoints");
-    return value ? JSON.parse(value) : DEFAULT_BREAKPOINTS;
+    const value = await tag?.getAttribute("data-ghostly-breakpoints");
+    return {
+      breakpoints: value ? JSON.parse(value) : DEFAULT_BREAKPOINTS,
+      production:
+        !!tag && (await tag.getAttribute("data-ghostly-dev")) === null,
+    };
   } finally {
     await page.close();
   }

@@ -27,8 +27,15 @@ export function GhostlyProvider({
   const value = useMemo(() => ({ data, breakpoints }), [data, breakpoints]);
   return (
     <GhostlyContext.Provider value={value}>
-      {/* `ghostly measure` reads the breakpoints from here. */}
-      <style data-ghostly-breakpoints={JSON.stringify(breakpoints)}>
+      {/* `ghostly measure` reads the breakpoints from here, and whether
+          the app runs in dev mode: only there <Ghost> measures. Server and
+          browser have the same mode, so the HTML matches. */}
+      <style
+        data-ghostly-breakpoints={JSON.stringify(breakpoints)}
+        data-ghostly-dev={
+          process.env.NODE_ENV === "development" ? "" : undefined
+        }
+      >
         {`${css}\n${breakpointCss(breakpoints)}`}
       </style>
       {children}

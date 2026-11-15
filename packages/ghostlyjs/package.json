@@ -25,11 +25,11 @@
   "exports": {
     ".": {
       "types": "./dist/react/index.d.ts",
-      "import": "./dist/react/index.js"
+      "default": "./dist/react/index.js"
     },
     "./core": {
       "types": "./dist/core/index.d.ts",
-      "import": "./dist/core/index.js"
+      "default": "./dist/core/index.js"
     },
     "./package.json": "./package.json"
   },
@@ -46,7 +46,7 @@
     "test": "vitest run"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=20.12"
   },
   "peerDependencies": {
     "react": ">=18"
@@ -67,6 +67,7 @@
     "registry": "https://registry.npmjs.org/"
   },
   "dependencies": {
+    "@clack/prompts": "^1.9.0",
     "playwright-core": "^1.65.1"
   }
 }
