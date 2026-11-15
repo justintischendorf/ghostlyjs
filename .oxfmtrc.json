@@ -20,6 +20,10 @@
     "**/coverage/**",
     "**/.next/**",
     "**/.ghostly/**",
+    "**/test-results/**",
+    "**/playwright-report/**",
+    "**/blob-report/**",
+    "**/.vitest/**",
     "bun.lock"
   ]
 }

@@ -4,7 +4,9 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
-    "lint": "oxlint --no-error-on-unmatched-pattern",
+    "test": "turbo run test",
+    "test:e2e": "turbo run test:e2e",
+    "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",

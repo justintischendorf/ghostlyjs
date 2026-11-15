@@ -27,6 +27,10 @@
     "coverage",
     ".turbo",
     ".next",
-    ".ghostly"
+    ".ghostly",
+    "test-results",
+    "playwright-report",
+    "blob-report",
+    ".vitest"
   ]
 }

@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // Types for `import logo from "*.svg"` and other Vite imports.
+    "types": ["vite/client"],
+    // Like `dedupe` in vite.config.ts, for types: `ghostlyjs` is linked from
+    // the workspace and would otherwise get the React 19 types of its own
+    // dev dependencies instead of this app's React 18 types.
+    "paths": {
+      "react": ["./node_modules/@types/react"],
+      "react/*": ["./node_modules/@types/react/*"]
+    }
+  },
+  "include": ["src", "vite.config.ts"]
+}
