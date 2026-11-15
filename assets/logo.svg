@@ -1,12 +1,46 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none">
   <title>Ghostly</title>
-  <!-- Body: a dome with a wavy hem -->
-  <path
-    d="M24 64a40 40 0 0 1 80 0v44a8 8 0 0 1-16 0 8 8 0 0 0-16 0 8 8 0 0 1-16 0 8 8 0 0 0-16 0 8 8 0 0 1-16 0z"
-    fill="#a78bfa"
-  />
-  <!-- Face made of skeleton bars: two eyes and a text line -->
-  <rect x="44" y="50" width="12" height="18" rx="6" fill="#0a0a0a"/>
-  <rect x="72" y="50" width="12" height="18" rx="6" fill="#0a0a0a"/>
-  <rect x="44" y="80" width="40" height="8" rx="4" fill="#0a0a0a" fill-opacity="0.35"/>
+  <defs>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#c4b5fd"/>
+      <stop offset="0.55" stop-color="#a78bfa"/>
+      <stop offset="1" stop-color="#8b5cf6"/>
+    </linearGradient>
+    <!-- The eyes blink every 4 seconds; they stay open with reduced
+         motion. -->
+    <style>
+      .eye {
+        transform-box: fill-box;
+        transform-origin: center;
+        animation: blink 4s infinite;
+      }
+      @keyframes blink {
+        0%, 92%, 100% { transform: scaleY(1); }
+        96% { transform: scaleY(0.1); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .eye { animation: none; }
+      }
+    </style>
+  </defs>
+  <!-- Shadow below the floating ghost -->
+  <ellipse cx="64" cy="121" rx="30" ry="4" fill="#8b5cf6" fill-opacity="0.3"/>
+  <g transform="translate(0 -4)">
+    <!-- Body: a dome with a wavy hem, and a highlight on the dome -->
+    <path
+      d="M24 64a40 40 0 0 1 80 0v44a8 8 0 0 1-16 0 8 8 0 0 0-16 0 8 8 0 0 1-16 0 8 8 0 0 0-16 0 8 8 0 0 1-16 0z"
+      fill="url(#body)"
+    />
+    <path d="M38 56a28 28 0 0 1 16-22" stroke="#fff" stroke-opacity="0.6" stroke-width="5" stroke-linecap="round"/>
+    <!-- Face: two round eyes with a shine that blink, and an open smile -->
+    <g class="eye">
+      <circle cx="50" cy="58" r="8" fill="#1e1b4b"/>
+      <circle cx="53" cy="55" r="2.4" fill="#fff"/>
+    </g>
+    <g class="eye">
+      <circle cx="78" cy="58" r="8" fill="#1e1b4b"/>
+      <circle cx="81" cy="55" r="2.4" fill="#fff"/>
+    </g>
+    <path d="M51 76h26a13 13 0 0 1-26 0z" fill="#1e1b4b" stroke="#1e1b4b" stroke-width="3" stroke-linejoin="round"/>
+  </g>
 </svg>

@@ -1,4 +1,3 @@
-// The repo logo, shared with the README (no copy in public/).
 import logo from "../../../../assets/logo.svg";
 import { Link, usePathname } from "../router";
 import { LoadingToggle } from "./loading";

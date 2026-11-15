@@ -55,7 +55,9 @@ and this project adheres to
   be imported. ([#21])
 - Package entries: `ghostlyjs` (React), `ghostlyjs/core` and the `ghostly`
   command, built with tsdown. ([#13])
-- Logo. ([#20])
+- Logo: a smiling, floating ghost whose eyes blink (not with reduced
+  motion). Shown at the top of the README, from an absolute URL so it
+  also shows on npm. ([#20])
 - Next.js playground with pages for common layouts, real async loading,
   edge cases and a light/dark toggle. ([#14], [#18], [#20], [#21])
 - Vite playground with the same pages on React 18.0.0, the oldest React
