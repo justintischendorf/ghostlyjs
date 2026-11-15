@@ -31,12 +31,15 @@ const measurement: GhostBoxMeasurement = {
 
 let folder: string;
 let child: ChildProcess | undefined;
+// Node, or another runtime like Bun.
+let runtime = process.execPath;
 
 beforeAll(() => {
   if (!existsSync(cli)) throw new Error(`${cli} is missing, run the build`);
 });
 
 afterEach(async () => {
+  runtime = process.execPath;
   if (child && child.exitCode === null) {
     const exited = new Promise((done) => child?.once("exit", done));
     child.kill();
@@ -49,7 +52,7 @@ afterEach(async () => {
 // Runs `ghostly <args>` in a new temporary folder.
 function run(...args: string[]) {
   folder = mkdtempSync(join(tmpdir(), "ghostly-test-"));
-  child = spawn(process.execPath, [cli, ...args], { cwd: folder });
+  child = spawn(runtime, [cli, ...args], { cwd: folder });
   let output = "";
   child.stdout?.on("data", (chunk) => (output += chunk));
   child.stderr?.on("data", (chunk) => (output += chunk));
@@ -133,6 +136,15 @@ describe("command line", () => {
 });
 
 describe("ghostly dev", () => {
+  // Bun ignores `engines` and may run the command instead of Node.
+  test("runs with Bun too", async () => {
+    runtime = "bun";
+    await startCollector();
+    expect((await patch("card")).status).toBe(204);
+    await waitFor(() => existsSync(file()));
+    expect(readData()).toEqual({ card: { xl: measurement } });
+  });
+
   test("stores a measurement in ghostly.json", async () => {
     await startCollector();
     expect((await patch("card")).status).toBe(204);
