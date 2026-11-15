@@ -11,7 +11,8 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { request } from "node:http";
+import { createServer, request } from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -120,14 +121,14 @@ describe("command line", () => {
     const { process, output } = run();
     const code = await new Promise((done) => process.once("exit", done));
     expect(code).toBe(0);
-    expect(output()).toContain("Usage: ghostly dev");
+    expect(output()).toMatch(/ghostly dev .*\n.*ghostly measure <url>/);
   });
 
   test("an unknown command prints the usage and fails", async () => {
     const { process, output } = run("nope");
     const code = await new Promise((done) => process.once("exit", done));
     expect(code).toBe(1);
-    expect(output()).toContain("Usage: ghostly dev");
+    expect(output()).toMatch(/ghostly dev .*\n.*ghostly measure <url>/);
   });
 });
 
@@ -250,4 +251,43 @@ describe("ghostly dev", () => {
     await startCollector();
     expect((await send("PATCH", body)).status).toBe(400);
   });
+});
+
+describe("ghostly dev and ghostly measure at the same time", () => {
+  test("measure sends nothing to the running collector", async () => {
+    const collector = await startCollector();
+    // A page that measures itself right away in the browser of measure.
+    const app = createServer((_, response) => {
+      response.writeHead(200, { "Content-Type": "text/html" }).end(`
+        <div data-ghost="a"></div>
+        <script>
+          fetch("http://localhost:${DEFAULT_PORT}", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: "a",
+              breakpoint: "base",
+              measurement: { width: 1, height: 1, boxes: [] },
+            }),
+          });
+        </script>`);
+    });
+    await new Promise<void>((done) => app.listen(0, "127.0.0.1", done));
+    const url = `http://localhost:${(app.address() as AddressInfo).port}`;
+
+    const measureFolder = mkdtempSync(join(tmpdir(), "ghostly-test-"));
+    try {
+      const measuring = spawn(
+        process.execPath,
+        [cli, "measure", url, "--max-pages", "1", "--wait", "300"],
+        { cwd: measureFolder },
+      );
+      expect(await new Promise((done) => measuring.once("exit", done))).toBe(0);
+    } finally {
+      app.close();
+      rmSync(measureFolder, { recursive: true, force: true });
+    }
+    expect(collector.output()).not.toContain("updated");
+    expect(existsSync(file())).toBe(false);
+  }, 60_000);
 });

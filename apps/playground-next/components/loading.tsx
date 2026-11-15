@@ -1,7 +1,14 @@
 "use client";
 
+import { isMeasuring } from "ghostlyjs";
 import { LoaderCircle, CircleCheck } from "lucide-react";
-import { createContext, useContext, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 
 // One loading state for the whole playground, so the toggle in the nav
 // switches every page between content and skeletons.
@@ -13,6 +20,12 @@ const LoadingContext = createContext({
 export function LoadingProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const toggle = () => setIsLoading((value) => !value);
+  // `ghostly measure` can't click the toggle: show the content right away.
+  // In an effect, because the server doesn't know and renders skeletons.
+  useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect -- see above
+    if (isMeasuring()) setIsLoading(false);
+  }, []);
   return (
     <LoadingContext.Provider value={{ isLoading, toggle }}>
       {children}

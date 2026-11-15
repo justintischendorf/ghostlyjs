@@ -9,6 +9,17 @@ import type {
 // Default port of the `ghostly dev` collector.
 export const DEFAULT_PORT = 6767;
 
+// Set on `window` by `ghostly measure` in the browser it opens.
+export const MEASURE_FLAG = "__ghostlyMeasure";
+
+// Whether the page runs in the browser of `ghostly measure`. For apps whose
+// content only shows after a click (demos, a loading toggle): they can show
+// it right away, so the command measures it. Always false on the server, so
+// check it in an effect, not while rendering, or hydration fails.
+export function isMeasuring(): boolean {
+  return typeof window !== "undefined" && MEASURE_FLAG in window;
+}
+
 export type {
   Breakpoints,
   GhostBoxContent,

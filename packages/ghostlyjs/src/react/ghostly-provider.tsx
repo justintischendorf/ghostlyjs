@@ -27,7 +27,10 @@ export function GhostlyProvider({
   const value = useMemo(() => ({ data, breakpoints }), [data, breakpoints]);
   return (
     <GhostlyContext.Provider value={value}>
-      <style>{`${css}\n${breakpointCss(breakpoints)}`}</style>
+      {/* `ghostly measure` reads the breakpoints from here. */}
+      <style data-ghostly-breakpoints={JSON.stringify(breakpoints)}>
+        {`${css}\n${breakpointCss(breakpoints)}`}
+      </style>
       {children}
     </GhostlyContext.Provider>
   );

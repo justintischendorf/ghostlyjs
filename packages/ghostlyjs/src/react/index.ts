@@ -5,3 +5,4 @@ export { Ghost } from "./ghost";
 export type { GhostProps } from "./types";
 export { GhostlyProvider } from "./ghostly-provider";
 export type { GhostlyProviderProps } from "./types";
+export { isMeasuring } from "../core";

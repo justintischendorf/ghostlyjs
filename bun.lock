@@ -67,6 +67,9 @@
       "bin": {
         "ghostly": "./dist/cli/index.js",
       },
+      "dependencies": {
+        "playwright-core": "^1.65.1",
+      },
       "devDependencies": {
         "@types/node": "^24.19.2",
         "@types/react": "^19.3.0",

@@ -8,8 +8,10 @@
 
 import { afterEach, describe, expect, test, vi } from "vitest";
 
+import { DEFAULT_BREAKPOINTS } from "../core/breakpoints";
+import { MEASURE_FLAG } from "../core/index";
 import type { GhostlyData } from "../core/types";
-import { Ghost, GhostlyProvider } from "./index";
+import { Ghost, GhostlyProvider, isMeasuring } from "./index";
 import {
   card,
   cleanup,
@@ -196,6 +198,40 @@ describe("GhostlyProvider", () => {
   });
 });
 
+describe("GhostlyProvider breakpoints", () => {
+  // `ghostly measure` reads them to know the window widths to open.
+  const attribute = (container: HTMLElement) =>
+    JSON.parse(
+      container
+        .querySelector("style")
+        ?.getAttribute("data-ghostly-breakpoints") ?? "null",
+    );
+
+  test("are on the style element for `ghostly measure`", async () => {
+    const { container } = await render(
+      <GhostlyProvider data={{}}>{null}</GhostlyProvider>,
+    );
+    expect(attribute(container)).toEqual(DEFAULT_BREAKPOINTS);
+  });
+
+  test("custom ones too", async () => {
+    const { container } = await render(
+      <GhostlyProvider data={{}} breakpoints={{ tablet: 600 }}>
+        {null}
+      </GhostlyProvider>,
+    );
+    expect(attribute(container)).toEqual({ tablet: 600 });
+  });
+});
+
+describe("isMeasuring", () => {
+  test("is true only in the browser of `ghostly measure`", () => {
+    expect(isMeasuring()).toBe(false);
+    vi.stubGlobal(MEASURE_FLAG, true);
+    expect(isMeasuring()).toBe(true);
+  });
+});
+
 describe("measuring in dev mode", () => {
   test("a fresh measurement replaces the stored one", async () => {
     mockCollector(true);
@@ -248,6 +284,31 @@ describe("measuring in dev mode", () => {
     const { rerender } = await render(ui(false));
     await rerender(ui(true));
     await rerender(ui(false));
+    await flush();
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  test("measures again when a web font arrived", async () => {
+    const fetch = mockCollector(true);
+    const ui = (isLoading: boolean) => (
+      <Ghost name="a" isLoading={isLoading}>
+        <div id="text" style={{ width: 300, height: 50 }} />
+      </Ghost>
+    );
+    const { container, rerender } = await render(ui(false));
+    await flush();
+    // The font changes the size of the text.
+    container.querySelector<HTMLElement>("#text")!.style.width = "320px";
+    document.fonts.dispatchEvent(new Event("loadingdone"));
+    await flush();
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    const [, init] = fetch.mock.calls[1] as unknown as [string, RequestInit];
+    expect(JSON.parse(init.body as string).measurement.width).toBe(320);
+
+    // While loading, the content isn't there: no measuring.
+    await rerender(ui(true));
+    document.fonts.dispatchEvent(new Event("loadingdone"));
     await flush();
     expect(fetch).toHaveBeenCalledTimes(2);
   });

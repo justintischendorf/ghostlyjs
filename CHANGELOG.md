@@ -35,6 +35,16 @@ and this project adheres to
   in light and dark mode. ([#16], [#17])
 - `ghostly dev` command: a local collector that receives the measurements
   from the browser and writes them to `ghostly.json`. ([#17])
+- `ghostly measure <url>` command: opens every page of the running app in a
+  headless browser at every breakpoint, waits until each `<Ghost>` shows
+  its content and writes the measurements to `ghostly.json`. So nobody has
+  to resize the window or click through the pages by hand. It follows the
+  app's links (`--pages` adds others), reports each `<Ghost>` that never
+  showed its content, and `--prune` removes ghosts no page showed. It
+  uses the installed Chrome or Edge, so nothing has to be downloaded
+  (`playwright-core` is a dependency of the package, without browsers).
+- `isMeasuring()`: true in the browser of `ghostly measure`, for content
+  that only shows after a click (the playgrounds' loading toggle).
 - A single placeholder bar for a `<Ghost>` that was never measured. ([#19])
 - Pulse animation on skeletons, turned off when the user prefers reduced
   motion. `<GhostlyProvider>` adds the styles, so no stylesheet needs to
@@ -65,6 +75,8 @@ and this project adheres to
 
 ### Fixed
 
+- `<Ghost>` measures again when a web font arrives after its content
+  showed, so text isn't measured with the fallback font.
 - More accurate skeletons: centered and right-aligned content, height of
   text-only content, divider borders no longer drawn as surfaces, text
   split into pieces joined per line, no text bars inside filled circles,
