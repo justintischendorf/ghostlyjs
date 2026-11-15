@@ -164,6 +164,28 @@ describe("text", () => {
     }
   });
 
+  // Two lines of a heading, each bar compared to the one below.
+  function gapBetweenLines(lineHeight: string): number {
+    const result = measure(`
+      <h1 style="margin: 0; width: 200px; font-size: 60px;
+        line-height: ${lineHeight}">
+        Skeletons measure
+      </h1>`);
+    const [first, second] = result.boxes;
+    if (!first || !second) throw new Error("expected two lines");
+    return second.y - (first.y + first.height);
+  }
+
+  test("lines of a tight heading don't overlap", () => {
+    // `leading-none`: the font is taller than its line.
+    expect(gapBetweenLines("1")).toBeGreaterThan(5);
+  });
+
+  test("lines keep a gap with the usual line height", () => {
+    expect(gapBetweenLines("normal")).toBeGreaterThan(5);
+    expect(gapBetweenLines("1.25")).toBeGreaterThan(5);
+  });
+
   test("pieces on the same line are joined into one bar", () => {
     const result = measure(
       '<p style="margin: 0">Hi <b>there</b>, <i>you</i> 42<span>%</span></p>',
