@@ -2,17 +2,34 @@
 // `ghostly measure`.
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { relative, resolve } from "node:path";
 
 import type { GhostlyData } from "../core/types";
+import { CliError } from "./cli-error";
 
 // Next to the app's package.json, where the command runs.
 export function ghostlyFile(): string {
   return resolve(process.cwd(), "ghostly.json");
 }
 
+// A broken file (e.g. merge conflict markers) is an error the user can
+// fix, not a crash; overwriting it would lose the measurements in it.
 export function readGhostlyFile(file: string): GhostlyData {
-  return existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : {};
+  if (!existsSync(file)) return {};
+  const broken = new CliError(
+    `${relative(process.cwd(), file)} is broken, e.g. by a merge conflict.\n` +
+      "Fix it, or delete it to measure everything again.",
+  );
+  let data: unknown;
+  try {
+    data = JSON.parse(readFileSync(file, "utf8"));
+  } catch {
+    throw broken;
+  }
+  if (typeof data !== "object" || data === null || Array.isArray(data)) {
+    throw broken;
+  }
+  return data as GhostlyData;
 }
 
 // Sorted by name, so the file only changes where values change.

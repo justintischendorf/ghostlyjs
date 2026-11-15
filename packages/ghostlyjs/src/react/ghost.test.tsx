@@ -255,6 +255,7 @@ describe("measuring in dev mode", () => {
 
   test("sends the measurement to `ghostly dev`", async () => {
     const fetch = mockCollector(true);
+    const info = vi.spyOn(console, "info");
     await render(
       <Ghost name="a" isLoading={false}>
         {content}
@@ -272,6 +273,9 @@ describe("measuring in dev mode", () => {
       breakpoint: "base",
       measurement: expect.objectContaining({ width: 300, height: 50 }),
     });
+    // The hint that `ghostly dev` isn't running only shows without it.
+    expect(info).not.toHaveBeenCalled();
+    info.mockRestore();
   });
 
   test("measures again when the content is shown again", async () => {

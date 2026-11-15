@@ -98,6 +98,13 @@ function repeat(
   return Array.from({ length: Math.max(1, times) }, (_, key) => render(key));
 }
 
+// Shown in the browser console when `ghostly dev` doesn't answer. Info, not
+// a warning: working without it is fine, e.g. with `ghostly measure`.
+const HINT =
+  "👻 ghostly: `ghostly dev` isn't running, so this measurement isn't " +
+  "saved. Run `npx ghostly dev` to update ghostly.json while you use " +
+  "the app, or `npx ghostly measure <url>` to measure every page at once.";
+
 // Whether `ghostly dev` answered the first request of this page load.
 let collectorOnline: Promise<boolean> | undefined;
 
@@ -118,6 +125,8 @@ function sendToCollector(body: string): void {
 
   if (!collectorOnline) {
     collectorOnline = send();
+    // Once per page load, next to the browser's own error for the request.
+    void collectorOnline.then((online) => online || console.info(HINT));
     return;
   }
   void collectorOnline.then((online) => online && send());

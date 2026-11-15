@@ -155,9 +155,12 @@ function ghostPage({
   links = [] as string[],
   breakpoints = '{"md":700}' as string | null,
   request = "",
+  // Like <GhostlyProvider> in dev mode; a production build lacks the mark.
+  dev = true,
 }) {
+  const mark = dev ? " data-ghostly-dev" : "";
   return `<!doctype html>
-${breakpoints ? `<style data-ghostly-breakpoints='${breakpoints}'></style>` : ""}
+${breakpoints ? `<style data-ghostly-breakpoints='${breakpoints}'${mark}></style>` : ""}
 ${ghosts.map((name) => `<div data-ghost="${name}"></div>`).join("\n")}
 ${links.map((href) => `<a href="${href}">link</a>`).join("\n")}
 <script>
@@ -200,7 +203,9 @@ const pages: Record<string, string> = {
   "/b": ghostPage({ ghosts: ["a", "never"], send: { a: 0 }, links: ["/"] }),
   "/hidden": ghostPage({ ghosts: ["hidden"], send: { hidden: 0 } }),
   // Like a production build: <Ghost>s, but no measurements.
-  "/prod": ghostPage({ ghosts: ["a"] }),
+  "/prod": ghostPage({ ghosts: ["a"], dev: false }),
+  // The same without <GhostlyProvider>: production can't be told apart.
+  "/prod-plain": ghostPage({ ghosts: ["a"], breakpoints: null }),
   // No <GhostlyProvider>: the default breakpoints.
   "/plain": ghostPage({ ghosts: ["a"], send: { a: 0 }, breakpoints: null }),
   "/empty": ghostPage({}),
@@ -245,12 +250,17 @@ afterAll(() => server.close());
 // existing ghostly.json. With Node, or another runtime like Bun.
 async function measure(
   args: string[],
-  existing?: object,
+  // The ghostly.json before; a string is written as it is (a broken file).
+  existing?: object | string,
   runtime = process.execPath,
 ) {
   const folder = mkdtempSync(join(tmpdir(), "ghostly-measure-"));
   const file = join(folder, "ghostly.json");
-  if (existing) writeFileSync(file, JSON.stringify(existing));
+  if (existing) {
+    const text =
+      typeof existing === "string" ? existing : JSON.stringify(existing);
+    writeFileSync(file, text);
+  }
   try {
     const child = spawn(runtime, [cli, "measure", ...args], {
       cwd: folder,
@@ -259,9 +269,9 @@ async function measure(
     child.stdout.on("data", (chunk) => (output += chunk));
     child.stderr.on("data", (chunk) => (output += chunk));
     const code = await new Promise((done) => child.once("exit", done));
-    const data = existsSync(file)
-      ? JSON.parse(readFileSync(file, "utf8"))
-      : undefined;
+    const text = existsSync(file) ? readFileSync(file, "utf8") : undefined;
+    // Left as it was when broken (see "a broken ghostly.json").
+    const data = text && text !== existing ? JSON.parse(text) : undefined;
     return { code, output, data };
   } finally {
     rmSync(folder, { recursive: true, force: true });
@@ -274,23 +284,23 @@ describe.concurrent("ghostly measure", { timeout: 60_000 }, () => {
     // Longer than "late" takes, which loads without a request.
     const { code, output, data } = await measure([origin, "--wait", "3500"]);
     expect(code).toBe(0);
-    expect(output).toContain("breakpoints      base 375 · md 700");
+    expect(output).toContain("base 375 · md 700");
     // At each breakpoint's width; also the one that loads late.
     const at = (width: number) => ({ width, height: 10, boxes: [] });
     expect(data).toEqual({
       a: { base: at(375), md: at(700) },
       late: { base: at(375), md: at(700) },
     });
-    expect(output).toMatch(/\/ +✓ 2 ghosts/);
-    expect(output).toMatch(/\/b +⚠ 1 of 2 ghosts/);
+    expect(output).toMatch(/\/ +2 ghosts/);
+    expect(output).toMatch(/\/b +1 of 2 ghosts/);
     expect(output).toContain('"never" never showed its content');
-    expect(output).toMatch(/\/missing +⚠ answered with 404/);
-    expect(output).toMatch(/\/file\.txt +⚠ is not a page/);
+    expect(output).toMatch(/\/missing +answered with 404/);
+    expect(output).toMatch(/\/file\.txt +is not a page/);
     // The same page once, other sites never.
     expect(output.match(/\/b /g)).toHaveLength(1);
     expect(output).not.toContain("outside");
-    expect(output).toContain("✓ 2 ghosts measured at 2 breakpoints");
-    expect(output).toContain("⚠ 1 ghost not measured everywhere");
+    expect(output).toContain("2 ghosts measured at 2 breakpoints");
+    expect(output).toContain("1 ghost not measured everywhere");
   });
 
   test("--pages adds pages no link points to", async () => {
@@ -344,7 +354,7 @@ describe.concurrent("ghostly measure", { timeout: 60_000 }, () => {
 
     const pruned = await measure([...args, "--prune"], existing);
     expect(Object.keys(pruned.data)).toEqual(["a"]);
-    expect(pruned.output).toContain('✓ removed 1 ghost no page showed: "old"');
+    expect(pruned.output).toContain('Removed 1 ghost no page showed: "old"');
   });
 
   test("waits for the app's requests, even longer than --wait", async () => {
@@ -373,18 +383,38 @@ describe.concurrent("ghostly measure", { timeout: 60_000 }, () => {
     expect(Object.keys(data)).toEqual(["a"]);
   });
 
-  test("no measurements: hints at dev mode, writes nothing", async () => {
+  test("a production build: stops right away, writes nothing", async () => {
+    const start = Date.now();
+    const { code, output, data } = await measure([`${origin}/prod`]);
+    expect(code).toBe(1);
+    expect(output).toContain("This is a production build");
+    expect(output).toContain("dev mode");
+    // No page was measured (they would take seconds each).
+    expect(output).not.toContain("never showed its content");
+    expect(Date.now() - start).toBeLessThan(3000);
+    expect(data).toBeUndefined();
+  });
+
+  test("no measurements without a provider: hints at dev mode", async () => {
     const { code, output, data } = await measure([
-      `${origin}/prod`,
+      `${origin}/prod-plain`,
       "--max-pages",
       "1",
       "--wait",
       "300",
     ]);
     expect(code).toBe(1);
-    expect(output).toContain("✗ No <Ghost> sent a measurement");
+    expect(output).toContain("No <Ghost> sent a measurement");
     expect(output).toContain("dev mode");
     expect(data).toBeUndefined();
+  });
+
+  test("an unknown option is named, without Node's long text", async () => {
+    const { code, output } = await measure([origin, "--fast"]);
+    expect(code).toBe(1);
+    expect(output).toContain('Unknown option "--fast".');
+    expect(output).not.toContain("positional argument");
+    expect(output).toContain("ghostly --help");
   });
 
   test("no <Ghost> at all", async () => {
@@ -396,9 +426,9 @@ describe.concurrent("ghostly measure", { timeout: 60_000 }, () => {
       "300",
     ]);
     expect(code).toBe(1);
-    expect(output).toContain("✗ No <Ghost> found on 1 page.");
+    expect(output).toContain("No <Ghost> found on 1 page.");
     // Without <Ghost>s, the page needs no other widths.
-    expect(output).toMatch(/\/empty +✓ 0 ghosts/);
+    expect(output).toMatch(/\/empty +0 ghosts/);
   });
 
   test("the start page fails", async () => {
@@ -411,14 +441,24 @@ describe.concurrent("ghostly measure", { timeout: 60_000 }, () => {
     const { code, output } = await measure(["http://localhost:1"]);
     expect(code).toBe(1);
     expect(output).toContain(
-      "✗ Can't reach http://localhost:1. Is your dev server running?",
+      "Can't reach http://localhost:1. Is your dev server running?",
     );
   });
 
-  test("a wrong call prints the usage", async () => {
+  test("a wrong call points to the help", async () => {
     const { code, output } = await measure([]);
     expect(code).toBe(1);
-    expect(output).toContain("✗ Pass the URL of your running app.");
-    expect(output).toContain("--prune");
+    expect(output).toContain("Pass the URL of your running app.");
+    expect(output).toContain("ghostly --help");
+  });
+
+  test("a broken ghostly.json is an error, not a crash", async () => {
+    const start = Date.now();
+    const { code, output } = await measure([origin], "<<<<<<< HEAD\n");
+    expect(code).toBe(1);
+    // Before measuring any page, not after all of them.
+    expect(Date.now() - start).toBeLessThan(3000);
+    expect(output).toContain("ghostly.json is broken");
+    expect(output).not.toContain("SyntaxError");
   });
 });

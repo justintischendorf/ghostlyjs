@@ -3,6 +3,8 @@
 
 import { createServer } from "node:http";
 
+import { intro, log, outro } from "@clack/prompts";
+
 import { DEFAULT_PORT } from "../core/index";
 import {
   ghostlyFile,
@@ -11,8 +13,12 @@ import {
   sortByKey,
   writeGhostlyFile,
 } from "./ghostly-file";
+import { header, style, time } from "./style";
 
 export function startDevServer(): void {
+  console.log(header("ghostly dev"));
+  intro("Collecting measurements");
+
   const file = ghostlyFile();
   // Kept in memory, so <Ghost>s sending at the same time can't overwrite
   // each other's entries.
@@ -48,7 +54,9 @@ export function startDevServer(): void {
       // again; unchanged values end that loop.
       if (JSON.stringify(entry[breakpoint]) !== JSON.stringify(measurement)) {
         data[name] = sortByKey({ ...entry, [breakpoint]: measurement });
-        console.log(`ghostly dev: updated "${name}" (${breakpoint})`);
+        log.step(
+          `${time()}  updated ${style("bold", name)} ${style("dim", breakpoint)}`,
+        );
         // All <Ghost>s measure at once; write the file once for all of them.
         clearTimeout(writeTimer);
         writeTimer = setTimeout(() => writeGhostlyFile(file, data), 100);
@@ -59,13 +67,32 @@ export function startDevServer(): void {
     }
   });
 
-  server.on("error", (error) => {
-    console.error(`ghostly dev: ${error.message}`);
+  server.on("error", (error: NodeJS.ErrnoException) => {
+    // Most likely a second `ghostly dev`; the port is fixed, because
+    // <Ghost> sends to it.
+    log.error(
+      error.code === "EADDRINUSE"
+        ? `Port ${DEFAULT_PORT} is in use. Is \`ghostly dev\` already running?`
+        : error.message,
+    );
+    outro(style("red", "Failed"));
     process.exitCode = 1;
   });
   // 127.0.0.1: reachable from this machine only, not from the network.
   server.listen(DEFAULT_PORT, "127.0.0.1", () => {
-    console.log(`ghostly dev: listening on http://localhost:${DEFAULT_PORT}`);
-    console.log(`ghostly dev: writing to ${file}`);
+    log.success(`Listening on http://localhost:${DEFAULT_PORT}`);
+    log.info(
+      `Writing to ${style("cyan", file)}\n` +
+        style(
+          "dim",
+          "Open your app in dev mode; every <Ghost> sends its measurement.",
+        ),
+    );
+  });
+
+  // Ctrl+C: end the output with a closing line instead of mid-way.
+  process.once("SIGINT", () => {
+    outro("Stopped");
+    process.exit(0);
   });
 }

@@ -20,6 +20,15 @@ afterEach(() => {
 
 const content = <div style={{ width: 300, height: 50 }}>Content</div>;
 
+// `ghostly measure` stops right away when this mark is missing.
+test("the provider doesn't mark dev mode", async () => {
+  const { container } = await render(
+    <GhostlyProvider data={{}}>{null}</GhostlyProvider>,
+  );
+  const style = container.querySelector("style[data-ghostly-breakpoints]");
+  expect(style?.hasAttribute("data-ghostly-dev")).toBe(false);
+});
+
 test("doesn't send measurements", async () => {
   const fetch = mockCollector(true);
   await render(
