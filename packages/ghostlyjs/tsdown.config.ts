@@ -1,4 +1,10 @@
+import { copyFileSync } from "node:fs";
+
 import { defineConfig, type UserConfig } from "tsdown";
+
+// Kept once in the repo root, for GitHub. npm takes a package's README and
+// LICENSE from its own folder, so the build copies them here (gitignored).
+const ROOT_FILES = ["README.md", "LICENSE"];
 
 // Defaults cover the rest: ESM, .js/.d.ts extensions, type declarations.
 const config: UserConfig = defineConfig({
@@ -19,6 +25,11 @@ const config: UserConfig = defineConfig({
     if (fileName.startsWith("react/")) return '"use client";';
     if (fileName.startsWith("cli/")) return "#!/usr/bin/env node";
     return undefined;
+  },
+  hooks: {
+    "build:done": () => {
+      for (const file of ROOT_FILES) copyFileSync(`../../${file}`, file);
+    },
   },
 });
 

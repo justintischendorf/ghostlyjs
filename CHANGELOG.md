@@ -72,7 +72,8 @@ and this project adheres to
 - Package entries: `ghostlyjs` (React), `ghostlyjs/core` and the `ghostly`
   command, built with tsdown. ([#13]) The entries also load with
   `require()` in Node versions that can require ES modules (20.19+,
-  22.12+).
+  22.12+). The package contains the README and the license, so npm shows
+  them.
 - Logo: a smiling, floating ghost whose eyes blink (not with reduced
   motion). Shown at the top of the README, from an absolute URL so it
   also shows on npm. ([#20])
