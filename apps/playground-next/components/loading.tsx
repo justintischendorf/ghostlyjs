@@ -23,7 +23,7 @@ export function LoadingProvider({ children }: { children: ReactNode }) {
   // `ghostly measure` can't click the toggle: show the content right away.
   // In an effect, because the server doesn't know and renders skeletons.
   useEffect(() => {
-    // oxlint-disable-next-line react/set-state-in-effect -- see above
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- see above
     if (isMeasuring()) setIsLoading(false);
   }, []);
   return (
