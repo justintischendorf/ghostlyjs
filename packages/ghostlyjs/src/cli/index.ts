@@ -1,94 +1,34 @@
 // Entry of the `ghostly` command. The build adds the Node shebang.
 
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { createServer } from "node:http";
-import { resolve } from "node:path";
+import { startDevServer } from "./dev";
+import { CliError, runMeasure } from "./measure";
 
-import { DEFAULT_PORT } from "../core/index";
-import type { GhostlyData } from "../core/types";
+const USAGE = `Usage:
+  ghostly dev              collect measurements while you use the app
+  ghostly measure <url>    measure every page at every breakpoint
 
-const command = process.argv[2];
+Options of measure:
+  --pages /a,/b            pages no link points to
+  --prune                  remove ghosts from ghostly.json that no page showed
+  --max-pages <n>          follow links to at most n pages (default 50)
+  --wait <ms>              how long a page may stay quiet before a <Ghost>
+                           counts as never loading (default 3000)`;
+
+const [command, ...args] = process.argv.slice(2);
 
 switch (command) {
   case "dev":
     startDevServer();
     break;
+  case "measure":
+    runMeasure(args).catch((error: unknown) => {
+      if (!(error instanceof CliError)) throw error;
+      console.error(`\n✗ ${error.message}`);
+      if (error.showUsage) console.error(`\n${USAGE}`);
+      process.exitCode = 1;
+    });
+    break;
   default:
-    console.log("Usage: ghostly dev");
+    console.log(USAGE);
     process.exitCode = command ? 1 : 0;
-}
-
-// Receives measurements from <Ghost> and stores them in `ghostly.json`.
-function startDevServer(): void {
-  const file = resolve(process.cwd(), "ghostly.json");
-  // Kept in memory, so <Ghost>s sending at the same time can't overwrite
-  // each other's entries.
-  const data: GhostlyData = existsSync(file)
-    ? JSON.parse(readFileSync(file, "utf8"))
-    : {};
-  let writeTimer: NodeJS.Timeout | undefined;
-
-  const server = createServer(async (request, response) => {
-    // Only pages running on this machine may send measurements.
-    const origin = request.headers.origin ?? "";
-    if (!/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
-      response.writeHead(403).end();
-      return;
-    }
-    // CORS: the app (e.g. localhost:3000) is another origin than this server.
-    response.setHeader("Access-Control-Allow-Origin", origin);
-    response.setHeader("Access-Control-Allow-Methods", "PATCH");
-    response.setHeader("Access-Control-Allow-Headers", "Content-Type");
-    // The browser asks first (preflight) before sending a JSON PATCH.
-    if (request.method !== "PATCH") {
-      response.writeHead(request.method === "OPTIONS" ? 204 : 405).end();
-      return;
-    }
-
-    try {
-      let body = "";
-      for await (const chunk of request) body += chunk;
-      const { name, breakpoint, measurement } = JSON.parse(body);
-      if (
-        typeof name !== "string" ||
-        typeof breakpoint !== "string" ||
-        !breakpoint ||
-        !Array.isArray(measurement?.boxes)
-      ) {
-        throw new Error("not a measurement");
-      }
-      // One measurement per breakpoint; the others of this <Ghost> stay.
-      const entry = data[name] ?? {};
-      // Only write on real changes. Writing reloads the app, which measures
-      // again; unchanged values end that loop.
-      if (JSON.stringify(entry[breakpoint]) !== JSON.stringify(measurement)) {
-        data[name] = sortByKey({ ...entry, [breakpoint]: measurement });
-        console.log(`ghostly dev: updated "${name}" (${breakpoint})`);
-        // All <Ghost>s measure at once; write the file once for all of them,
-        // sorted by name so the file only changes where values change.
-        clearTimeout(writeTimer);
-        writeTimer = setTimeout(() => {
-          writeFileSync(file, `${JSON.stringify(sortByKey(data), null, 2)}\n`);
-        }, 100);
-      }
-      response.writeHead(204).end();
-    } catch {
-      response.writeHead(400).end();
-    }
-  });
-
-  server.on("error", (error) => {
-    console.error(`ghostly dev: ${error.message}`);
-    process.exitCode = 1;
-  });
-  // 127.0.0.1: reachable from this machine only, not from the network.
-  server.listen(DEFAULT_PORT, "127.0.0.1", () => {
-    console.log(`ghostly dev: listening on http://localhost:${DEFAULT_PORT}`);
-    console.log(`ghostly dev: writing to ${file}`);
-  });
-}
-
-// Sorted keys, so the file only changes where values change.
-function sortByKey<T>(object: Record<string, T>): Record<string, T> {
-  return Object.fromEntries(Object.entries(object).sort());
 }

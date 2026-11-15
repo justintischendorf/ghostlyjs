@@ -31,11 +31,19 @@ export function Ghost({
     if (isLoading || !ref.current) return;
     if (process.env.NODE_ENV !== "development") return;
 
-    const measurement = measureElement(ref.current, { list: isList });
-    // `innerWidth` includes the scrollbar, like the width media queries see.
-    const breakpoint = breakpointOf(window.innerWidth, breakpoints);
-    setMeasured((previous) => ({ ...previous, [breakpoint]: measurement }));
-    sendToCollector(JSON.stringify({ name, breakpoint, measurement }));
+    const element = ref.current;
+    const measure = () => {
+      const measurement = measureElement(element, { list: isList });
+      // `innerWidth` includes the scrollbar, like the width media queries see.
+      const breakpoint = breakpointOf(window.innerWidth, breakpoints);
+      setMeasured((previous) => ({ ...previous, [breakpoint]: measurement }));
+      sendToCollector(JSON.stringify({ name, breakpoint, measurement }));
+    };
+    measure();
+    // A web font can arrive after the content showed. Text measured with the
+    // fallback font has other sizes, so measure again once it is there.
+    document.fonts?.addEventListener("loadingdone", measure);
+    return () => document.fonts?.removeEventListener("loadingdone", measure);
   }, [isLoading, name, isList, breakpoints]);
 
   if (!isLoading) {
