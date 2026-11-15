@@ -110,6 +110,10 @@ and this project adheres to
   split into pieces joined per line, no text bars inside filled circles,
   overflow clipping (`truncate`, `line-clamp`, scroll areas), rotated and
   scaled elements, inline images and rounded icons. ([#19])
+- Text bars of lines below each other no longer overlap (headings with a
+  tight `line-height` like `leading-none`) or touch (the usual line
+  heights): each bar takes 80% of its line, so a gap stays like between
+  the letters.
 - The placeholder package can be published to npm. ([#3])
 
 ### Removed

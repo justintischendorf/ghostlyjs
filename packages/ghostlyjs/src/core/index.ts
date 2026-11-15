@@ -61,6 +61,10 @@ const MEDIA = new Set([
 // Radius of text lines and icons, which have none of their own.
 const SMALL_RADIUS = 4;
 
+// Text bars take this share of their line, so lines below each other keep
+// a gap, like the letters do.
+const TEXT_BAR = 0.8;
+
 // `root` is the <Ghost> wrapper. It has `display: contents` and no box of
 // its own, so the frame is measured from its children.
 // With `list`, the children are the items of a list: only the first one is
@@ -139,8 +143,9 @@ export function measureElement(
     for (const node of nodes) {
       if (node instanceof Text) {
         if (!node.textContent?.trim()) continue;
+        const lineHeight = lineHeightOf(node);
         for (const rect of rangeOf(node).getClientRects()) {
-          const box = toBox(rect, SMALL_RADIUS, clip);
+          const box = toBox(textBar(rect, lineHeight), SMALL_RADIUS, clip);
           if (box) lines.push(box);
         }
         continue;
@@ -212,14 +217,34 @@ function measureFrame(nodes: Node[]): DOMRect {
   return new DOMRect(left, top, right - left, bottom - top);
 }
 
+// The line height of a text node in px; NaN for `line-height: normal`.
+function lineHeightOf(node: Text): number {
+  return node.parentElement
+    ? parseFloat(getComputedStyle(node.parentElement).lineHeight)
+    : NaN;
+}
+
+// The bar for one line of text. Its rect spans the font from its highest
+// to its lowest point: taller than the line with a tight `line-height`
+// (e.g. `leading-none` headings), so the lines would overlap, and as high
+// as the line otherwise, so they would touch. The bar is a share of the
+// lower of both, centered like the letters.
+function textBar(rect: DOMRect, lineHeight: number): DOMRect {
+  const height = Math.min(rect.height, lineHeight || rect.height) * TEXT_BAR;
+  return new DOMRect(
+    rect.left,
+    rect.top + (rect.height - height) / 2,
+    rect.width,
+    height,
+  );
+}
+
 // The rect of a text node is only as high as the letters. Its lines take
 // the full line height in the layout, so the frame is grown to that.
 function textRect(node: Text): DOMRect {
   const range = rangeOf(node);
   const rect = range.getBoundingClientRect();
-  const lineHeight = node.parentElement
-    ? parseFloat(getComputedStyle(node.parentElement).lineHeight)
-    : NaN;
+  const lineHeight = lineHeightOf(node);
   const extra = (range.getClientRects().length * lineHeight - rect.height) / 2;
   if (!(extra > 0)) return rect;
   return new DOMRect(
