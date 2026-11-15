@@ -45,6 +45,10 @@ and this project adheres to
   (`playwright-core` is a dependency of the package, without browsers).
 - `isMeasuring()`: true in the browser of `ghostly measure`, for content
   that only shows after a click (the playgrounds' loading toggle).
+- The package names Node 20 as the minimum (`engines`), the version
+  `playwright-core` needs for `ghostly measure`. So npm warns on install
+  instead of the command failing later. Bun ignores `engines`; both
+  commands also run with Bun.
 - A single placeholder bar for a `<Ghost>` that was never measured. ([#19])
 - Pulse animation on skeletons, turned off when the user prefers reduced
   motion. `<GhostlyProvider>` adds the styles, so no stylesheet needs to

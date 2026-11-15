@@ -242,13 +242,17 @@ beforeAll(async () => {
 afterAll(() => server.close());
 
 // Runs `ghostly measure` in a new temporary folder, optionally with an
-// existing ghostly.json.
-async function measure(args: string[], existing?: object) {
+// existing ghostly.json. With Node, or another runtime like Bun.
+async function measure(
+  args: string[],
+  existing?: object,
+  runtime = process.execPath,
+) {
   const folder = mkdtempSync(join(tmpdir(), "ghostly-measure-"));
   const file = join(folder, "ghostly.json");
   if (existing) writeFileSync(file, JSON.stringify(existing));
   try {
-    const child = spawn(process.execPath, [cli, "measure", ...args], {
+    const child = spawn(runtime, [cli, "measure", ...args], {
       cwd: folder,
     });
     let output = "";
@@ -300,6 +304,17 @@ describe.concurrent("ghostly measure", { timeout: 60_000 }, () => {
       "500",
     ]);
     expect(Object.keys(data)).toEqual(["a", "hidden"]);
+  });
+
+  // Bun ignores `engines` and may run the command instead of Node.
+  test("runs with Bun too", async () => {
+    const { code, data } = await measure(
+      [origin, "--max-pages", "1", "--wait", "300"],
+      undefined,
+      "bun",
+    );
+    expect(code).toBe(0);
+    expect(Object.keys(data.a)).toEqual(["base", "md"]);
   });
 
   test("without <GhostlyProvider>, the default breakpoints", async () => {
