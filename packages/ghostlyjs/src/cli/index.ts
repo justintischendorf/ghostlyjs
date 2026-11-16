@@ -25,6 +25,8 @@ ${style("bold", "Options of measure")}
   --max-pages <n>          follow links to at most n pages (default 50)
   --wait <ms>              how long a page may stay quiet before a <Ghost>
                            counts as never loading (default 3000)
+  --cookie name=value      send a cookie with every page, e.g. a login
+                           session (repeat for more cookies)
 
 ${style("bold", "Other")}
   -h, --help               show this help

@@ -156,15 +156,23 @@ until each `<Ghost>` shows its content.
 npx ghostly measure http://localhost:3000
 ```
 
-| Option            | Default | What it does                                                                                |
-| ----------------- | ------- | ------------------------------------------------------------------------------------------- |
-| `--pages /a,/b`   |         | Also measures pages no link points to.                                                      |
-| `--prune`         | off     | Removes ghosts no page showed, e.g. renamed or deleted ones.                                |
-| `--max-pages <n>` | `50`    | Follows links to at most `n` pages.                                                         |
-| `--wait <ms>`     | `3000`  | How long a page may stay quiet before a `<Ghost>` that still loads counts as never loading. |
+| Option                | Default | What it does                                                                                |
+| --------------------- | ------- | ------------------------------------------------------------------------------------------- |
+| `--pages /a,/b`       |         | Also measures pages no link points to.                                                      |
+| `--prune`             | off     | Removes ghosts no page showed, e.g. renamed or deleted ones.                                |
+| `--max-pages <n>`     | `50`    | Follows links to at most `n` pages.                                                         |
+| `--wait <ms>`         | `3000`  | How long a page may stay quiet before a `<Ghost>` that still loads counts as never loading. |
+| `--cookie name=value` |         | Sends a cookie with every page, e.g. your login session. Repeat it for more cookies.        |
+
+For pages behind a login, copy your session cookie from the browser's dev
+tools (Application → Cookies) and pass it with `--cookie`:
+
+```bash
+npx ghostly measure http://localhost:3000/dashboard --cookie "session=..."
+```
 
 **`ghostly dev`** saves measurements while you use the app, for content
-`ghostly measure` can't reach, like behind a click or a login. It measures
+`ghostly measure` can't reach, like behind a click. It measures
 at your window width; resize the window for other breakpoints.
 
 ```bash

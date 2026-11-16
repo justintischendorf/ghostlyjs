@@ -8,6 +8,15 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-16
+
+### Added
+
+- `--cookie name=value` option for `ghostly measure`: sends the cookie with
+  every page, so pages behind a login (e.g. a session cookie) are measured
+  too instead of only the login page they redirect to. Repeat it for more
+  cookies; the value may contain `=`. ([#36])
+
 ## [0.1.0] - 2026-11-15
 
 ### Added
@@ -136,7 +145,8 @@ and this project adheres to
 - Placeholder package `ghostlyjs` on npm to reserve the name. Not usable yet.
   ([#1], [#2])
 
-[Unreleased]: https://github.com/justintischendorf/ghostlyjs/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/justintischendorf/ghostlyjs/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/justintischendorf/ghostlyjs/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/justintischendorf/ghostlyjs/compare/v0.0.1...v0.1.0
 [0.0.1]: https://github.com/justintischendorf/ghostlyjs/releases/tag/v0.0.1
 [#1]: https://github.com/justintischendorf/ghostlyjs/pull/1
@@ -169,3 +179,4 @@ and this project adheres to
 [#31]: https://github.com/justintischendorf/ghostlyjs/pull/31
 [#33]: https://github.com/justintischendorf/ghostlyjs/pull/33
 [#34]: https://github.com/justintischendorf/ghostlyjs/pull/34
+[#36]: https://github.com/justintischendorf/ghostlyjs/pull/36
