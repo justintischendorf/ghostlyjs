@@ -27,6 +27,9 @@ export type MeasureCommandOptions = {
   pages: string[];
   prune: boolean;
   maxPages: number;
+  // Cookies every page gets, e.g. a login session, so pages behind a
+  // login can be measured too.
+  cookies: { name: string; value: string }[];
   // Quiet time (ms) after which the <Ghost>s still loading count as never
   // loading.
   wait: number;
@@ -51,6 +54,7 @@ export function parseOptions(args: string[]): MeasureCommandOptions {
         prune: { type: "boolean", default: false },
         "max-pages": { type: "string", default: "50" },
         wait: { type: "string", default: "3000" },
+        cookie: { type: "string", multiple: true, default: [] },
       },
     });
   } catch (error) {
@@ -80,6 +84,15 @@ export function parseOptions(args: string[]): MeasureCommandOptions {
   if (!Number.isFinite(wait) || wait < 0) {
     throw new CliError("--wait needs a number of milliseconds.");
   }
+  // "name=value"; the value may contain "=" itself.
+  const cookies = values.cookie.map((cookie) => {
+    const split = cookie.indexOf("=");
+    const name = cookie.slice(0, split).trim();
+    if (split < 0 || !name) {
+      throw new CliError(`--cookie needs name=value, not "${cookie}".`);
+    }
+    return { name, value: cookie.slice(split + 1) };
+  });
   return {
     url,
     pages: (values.pages ?? "")
@@ -88,6 +101,7 @@ export function parseOptions(args: string[]): MeasureCommandOptions {
       .filter(Boolean),
     prune: values.prune,
     maxPages,
+    cookies,
     wait,
   };
 }
@@ -172,6 +186,11 @@ export async function runMeasure(args: string[]): Promise<void> {
   });
   try {
     const context = await browser.newContext();
+    if (options.cookies.length > 0) {
+      await context.addCookies(
+        options.cookies.map((cookie) => ({ ...cookie, url: origin })),
+      );
+    }
     // Lets the app know (`isMeasuring()`) before any of its code runs.
     await context.addInitScript(`window.${MEASURE_FLAG} = true;`);
     // No measurement may reach a running `ghostly dev`, not even from a page

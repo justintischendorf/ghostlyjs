@@ -36,6 +36,7 @@ describe("parseOptions", () => {
       pages: [],
       prune: false,
       maxPages: 50,
+      cookies: [],
       wait: 3000,
     });
   });
@@ -51,11 +52,19 @@ describe("parseOptions", () => {
         "5",
         "--wait",
         "100",
+        "--cookie",
+        "session=a=b",
+        "--cookie",
+        " theme =dark",
       ]),
     ).toMatchObject({
       pages: ["/a", "/b"],
       prune: true,
       maxPages: 5,
+      cookies: [
+        { name: "session", value: "a=b" },
+        { name: "theme", value: "dark" },
+      ],
       wait: 100,
     });
   });
@@ -67,6 +76,8 @@ describe("parseOptions", () => {
     [["ftp://localhost"], /not a URL/],
     [["http://localhost", "--max-pages", "0"], /--max-pages/],
     [["http://localhost", "--wait", "soon"], /--wait/],
+    [["http://localhost", "--cookie", "session"], /--cookie/],
+    [["http://localhost", "--cookie", "=value"], /--cookie/],
     [["http://localhost", "--nope"], /Unknown option/],
   ])("rejects %j", (args, message) => {
     expect(() => parseOptions(args)).toThrow(message);
@@ -209,6 +220,8 @@ const pages: Record<string, string> = {
   // No <GhostlyProvider>: the default breakpoints.
   "/plain": ghostPage({ ghosts: ["a"], send: { a: 0 }, breakpoints: null }),
   "/empty": ghostPage({}),
+  // Behind a login: without the session cookie, a redirect to "/empty".
+  "/private": ghostPage({ ghosts: ["private"], send: { private: 0 } }),
   // Its data comes from a slow API.
   "/api-data": ghostPage({
     ghosts: ["data"],
@@ -231,6 +244,10 @@ beforeAll(async () => {
     }
     if (path === "/file.txt") {
       response.writeHead(200, { "Content-Type": "text/plain" }).end("file");
+      return;
+    }
+    if (path === "/private" && request.headers.cookie !== "session=a=b") {
+      response.writeHead(302, { Location: "/empty" }).end();
       return;
     }
     const page = pages[path];
@@ -314,6 +331,14 @@ describe.concurrent("ghostly measure", { timeout: 60_000 }, () => {
       "500",
     ]);
     expect(Object.keys(data)).toEqual(["a", "hidden"]);
+  });
+
+  test("--cookie reaches pages behind a login", async () => {
+    const args = [`${origin}/private`, "--wait", "500"];
+    const { data } = await measure([...args, "--cookie", "session=a=b"]);
+    expect(Object.keys(data)).toEqual(["private"]);
+    const without = await measure(args);
+    expect(without.output).toContain("No <Ghost> found");
   });
 
   // Bun ignores `engines` and may run the command instead of Node.
