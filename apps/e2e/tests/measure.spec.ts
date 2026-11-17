@@ -1,7 +1,7 @@
 // Runs `ghostly measure` against the playground of the project (see
 // playwright.config.ts), like a user would, and checks the ghostly.json it
-// writes. The playgrounds show their content right away for the command
-// (`isMeasuring()`), so it reaches every <Ghost>.
+// writes. The command taps every button, so it reaches every <Ghost>, also
+// the ones that only show after a tap.
 
 import { spawn } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -50,8 +50,13 @@ test("ghostly measure measures every page at every breakpoint", async ({
 
     const data = JSON.parse(readFileSync(join(folder, "ghostly.json"), "utf8"));
     expect(Object.keys(data)).toEqual(playgroundGhosts);
+    // Every breakpoint, plus widths inside one where the layout changes
+    // ("base@390").
     for (const name of playgroundGhosts) {
-      expect(Object.keys(data[name]), name).toEqual(BREAKPOINTS);
+      const breakpoints = new Set(
+        Object.keys(data[name]).map((key) => key.split("@")[0]),
+      );
+      expect([...breakpoints].sort(), name).toEqual(BREAKPOINTS);
     }
     // Different layouts per width: the playgrounds' content is narrower or
     // wider at every breakpoint, so each one has its own measurement.

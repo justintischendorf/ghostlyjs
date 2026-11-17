@@ -84,10 +84,6 @@ const SKELETON = ".ghostly-skeleton, .ghostly-placeholder";
 let hydrationErrors: string[] = [];
 
 test.beforeEach(async ({ page }) => {
-  // Never reach a running `ghostly dev`: it would store the measurements of
-  // this test (e.g. in a phone window) in `ghostly.json`.
-  await page.route("http://localhost:6767/**", (route) => route.abort());
-
   hydrationErrors = [];
   const collect = (text: string) => {
     if (/hydrat/i.test(text)) hydrationErrors.push(text);
