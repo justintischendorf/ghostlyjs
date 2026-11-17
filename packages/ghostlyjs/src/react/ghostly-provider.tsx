@@ -2,7 +2,11 @@
 
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 
-import { breakpointCss, DEFAULT_BREAKPOINTS } from "../core/breakpoints";
+import {
+  boundariesOf,
+  breakpointCss,
+  DEFAULT_BREAKPOINTS,
+} from "../core/breakpoints";
 import type { Breakpoints, GhostlyData } from "../core/types";
 import { css } from "./ghost-styles";
 import type { GhostlyProviderProps } from "./types";
@@ -18,13 +22,18 @@ const GhostlyContext = createContext<GhostlyContextValue>({
 // Wrap the app once and pass the generated data (e.g. `ghostly.json`).
 // `.Provider` instead of `<Context value>` keeps React 18 support.
 // It also adds the skeleton styles once, so users don't import a CSS file,
-// including the media queries that pick the variant for each breakpoint.
+// including the media queries that pick the variant for each width.
 export function GhostlyProvider({
   data,
   breakpoints = DEFAULT_BREAKPOINTS,
   children,
 }: GhostlyProviderProps): ReactNode {
   const value = useMemo(() => ({ data, breakpoints }), [data, breakpoints]);
+  // One rule per width where a variant starts or ends.
+  const rules = useMemo(
+    () => breakpointCss(boundariesOf(data, breakpoints)),
+    [data, breakpoints],
+  );
   return (
     <GhostlyContext.Provider value={value}>
       {/* `ghostly measure` reads the breakpoints from here, and whether
@@ -36,7 +45,7 @@ export function GhostlyProvider({
           process.env.NODE_ENV === "development" ? "" : undefined
         }
       >
-        {`${css}\n${breakpointCss(breakpoints)}`}
+        {`${css}\n${rules}`}
       </style>
       {children}
     </GhostlyContext.Provider>

@@ -18,7 +18,8 @@ const LoadingContext = createContext({
 export function LoadingProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const toggle = () => setIsLoading((value) => !value);
-  // `ghostly measure` can't click the toggle: show the content right away.
+  // `ghostly measure` would find the content by tapping the toggle too;
+  // showing it right away is faster.
   // In an effect, because the server doesn't know and renders skeletons.
   useEffect(() => {
     // oxlint-disable-next-line react/set-state-in-effect -- see above

@@ -10,7 +10,7 @@ import { page } from "vitest/browser";
 
 import type { GhostBoxMeasurement, GhostlyData } from "../core/types";
 import { Ghost, GhostlyProvider } from "./index";
-import { cleanup, flush, mockCollector, render } from "./test-utils";
+import { cleanup, render } from "./test-utils";
 
 afterEach(async () => {
   cleanup();
@@ -77,6 +77,20 @@ describe("variants", () => {
     expect(visibleHeights(container)).toEqual([80]);
   });
 
+  test("a width inside a range shows its own variant", async () => {
+    const { container } = await render(
+      ghost({ a: { base: high(40), "base@390": high(60), sm: high(80) } }),
+    );
+    await page.viewport(389, 800);
+    expect(visibleHeights(container)).toEqual([40]);
+    await page.viewport(390, 800);
+    expect(visibleHeights(container)).toEqual([60]);
+    await page.viewport(639, 800);
+    expect(visibleHeights(container)).toEqual([60]);
+    await page.viewport(640, 800);
+    expect(visibleHeights(container)).toEqual([80]);
+  });
+
   test("a list repeats each variant, one of them is shown", async () => {
     const { container } = await render(
       <GhostlyProvider data={{ a: { base: high(40), lg: high(80) } }}>
@@ -91,8 +105,7 @@ describe("variants", () => {
 });
 
 describe("measuring per breakpoint", () => {
-  test("is stored under the breakpoint of the window width", async () => {
-    const fetch = mockCollector(true);
+  test("a fresh measurement shows at the width it was measured at", async () => {
     await page.viewport(1300, 800);
     const ui = (isLoading: boolean) => (
       <GhostlyProvider data={{ a: { base: high(10) } }}>
@@ -102,17 +115,8 @@ describe("measuring per breakpoint", () => {
       </GhostlyProvider>
     );
     const { container, rerender } = await render(ui(false));
-    await flush();
 
-    const [, init] = fetch.mock.calls[0] as unknown as [string, RequestInit];
-    expect(JSON.parse(init.body as string)).toMatchObject({
-      name: "a",
-      breakpoint: "xl",
-      measurement: { height: 50 },
-    });
-
-    // The fresh measurement shows at this width; the stored one for base
-    // stays for narrow windows.
+    // Stored under "xl"; the stored one for base stays for narrow windows.
     await rerender(ui(true));
     expect(visibleHeights(container)).toEqual([50]);
     await page.viewport(414, 800);

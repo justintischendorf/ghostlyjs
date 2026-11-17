@@ -104,15 +104,19 @@ describe("surfaces", () => {
 });
 
 describe("hidden elements", () => {
-  test.each([["display: none"], ["visibility: hidden"], ["opacity: 0"]])(
-    "%s is skipped",
-    (style) => {
-      const result = measure(`
+  test.each([
+    ["display: none"],
+    ["visibility: hidden"],
+    ["opacity: 0"],
+    // `sr-only`, in Tailwind v4 and in older CSS.
+    ["position: absolute; clip-path: inset(50%)"],
+    ["position: absolute; clip: rect(0 0 0 0)"],
+  ])("%s is skipped", (style) => {
+    const result = measure(`
       <div style="width: 50px; height: 50px; background: red"></div>
       <div style="width: 50px; height: 50px; background: red; ${style}"></div>`);
-      expect(result.boxes).toHaveLength(1);
-    },
-  );
+    expect(result.boxes).toHaveLength(1);
+  });
 });
 
 describe("media and form controls", () => {
@@ -191,6 +195,20 @@ describe("text", () => {
       '<p style="margin: 0">Hi <b>there</b>, <i>you</i> 42<span>%</span></p>',
     );
     expect(result.boxes).toHaveLength(1);
+  });
+
+  // Like a table row: a right-aligned name, a bigger score that sits a bit
+  // higher, and a second name.
+  test("pieces of one line in different sizes each keep their bar", () => {
+    container.style.display = "flex";
+    container.style.alignItems = "center";
+    const result = measure(`
+      <span style="width: 120px; text-align: right; font-size: 12px">Home</span>
+      <span style="width: 60px; text-align: center; font-size: 16px">1 : 2</span>
+      <span style="width: 120px; font-size: 12px">Guest</span>`);
+    expect(result.boxes).toHaveLength(3);
+    // The name on the left is still there.
+    expect(result.boxes.filter((box) => box.x < 120)).toHaveLength(1);
   });
 
   test("text inside a surface gives the surface and the line", () => {
@@ -279,6 +297,20 @@ describe("placement in the parent", () => {
       `<div style="width: 100px; height: 20px; ${style}"></div>`,
     );
     expect(result.align).toBe(align);
+  });
+
+  test.each([
+    ["", true],
+    ["width: 100px", undefined],
+  ])("`%s` → fill: %s", (style, fill) => {
+    const result = measure(`<div style="height: 20px; ${style}"></div>`);
+    expect(result.fill).toBe(fill);
+  });
+
+  test("content in a flex row never fills", () => {
+    container.style.display = "flex";
+    const result = measure('<div style="flex: 1; height: 20px"></div>');
+    expect(result.fill).toBeUndefined();
   });
 
   test("auto margins in a flex row are not stored", () => {

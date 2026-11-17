@@ -1,5 +1,5 @@
 // Tests for <Ghost> in production (`NODE_ENV` is "production", see
-// vitest.config.ts): it must never measure or send anything.
+// vitest.config.ts): it must never measure anything.
 
 import { afterEach, expect, test, vi } from "vitest";
 
@@ -8,8 +8,8 @@ import {
   card,
   cleanup,
   everywhere,
-  flush,
-  mockCollector,
+  measureAll,
+  measuring,
   render,
 } from "./test-utils";
 
@@ -29,19 +29,17 @@ test("the provider doesn't mark dev mode", async () => {
   expect(style?.hasAttribute("data-ghostly-dev")).toBe(false);
 });
 
-test("doesn't send measurements", async () => {
-  const fetch = mockCollector(true);
+test("can't be measured, not even by `ghostly measure`", async () => {
+  measuring();
   await render(
     <Ghost name="a" isLoading={false}>
       {content}
     </Ghost>,
   );
-  await flush();
-  expect(fetch).not.toHaveBeenCalled();
+  expect(measureAll()).toEqual([]);
 });
 
 test("keeps the stored measurement after the content was shown", async () => {
-  mockCollector(true);
   const ui = (isLoading: boolean) => (
     <GhostlyProvider data={{ card: everywhere(card) }}>
       <Ghost name="card" isLoading={isLoading}>

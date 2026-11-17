@@ -8,6 +8,63 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Added
+
+- `ghostly measure` taps everything: every button, tab, menu, dialog and
+  accordion, one after the other, also what a tap opens. `<Ghost>`s that
+  only show after a tap are measured, and links in opened menus are
+  followed. While tapping, every request that would write (`POST`, `PUT`,
+  `PATCH`, `DELETE`) is blocked, buttons and links that log out are never
+  tapped, and `data-ghostly-skip` keeps it away from anything else.
+  `--max-taps <n>` (default 100, `0` for none) limits the taps per page
+  and breakpoint.
+- `ghostly measure` measures each breakpoint across all its widths, exact
+  to the pixel, from 320px (the smallest phones) up to 1920px. Where the
+  layout changes inside a breakpoint (buttons that wrap at 390px, text
+  that takes another line), `ghostly.json` gets another entry from that
+  width on, e.g. `"base@390"`, and the skeleton switches there too.
+- Skeletons measured by `ghostly measure` follow the window like the
+  content in between: a `flex-1` column, a button pushed to the right edge
+  or a chart with an aspect ratio grow and move exactly like it (stored as
+  `widthCalc`, `xCalc`, `heightCalc`, ... and drawn with `calc()` and
+  container units).
+- The windows of one page run side by side, each with its own browser
+  profile, so what a tap stores (a theme, a collapsed sidebar) doesn't
+  change the other measurements.
+
+### Removed
+
+- `ghostly dev` and its collector on port 6767. `ghostly measure` reaches
+  everything it was needed for. `<Ghost>` no longer sends requests in dev
+  mode, so the console hint about a missing `ghostly dev` is gone too.
+  Measure again with `ghostly measure --prune` once.
+- `hideClass` from `ghostlyjs/core`. Variants are hidden with
+  `fromClass` / `toClass` now, and `variantsOf` returns `from` and `to`
+  widths instead of range indexes.
+
+### Fixed
+
+- Skeletons of content that fills its parent (cards, tables, headings in a
+  block) fill it too, also when it is wider than when measured. Before,
+  they kept the measured width, so on a phone wider than the measured
+  375px they were shorter than the content. `ghostly.json` stores this as
+  `fill`; measure again to get it.
+- Skeletons of other content have the measured width as a real width
+  instead of `width: 100%`. A parent sized by its content (`w-auto`,
+  `inline-flex`, a toolbar) now makes room for the skeleton like for the
+  content. Before, it counted as 0px there, so the toolbar got narrower,
+  wrapped and moved the page below it.
+- Text pieces of one line in different sizes keep their own bars. Before,
+  a piece left of a bigger one that sits a bit higher (a name next to a
+  score in a table row) was joined into it and vanished from the skeleton.
+- Elements hidden for screen readers only (`sr-only`, `clip-path:
+  inset(50%)` or `clip: rect(0 0 0 0)`) are no longer drawn, like a hidden
+  file input over an avatar.
+- Cards and other large boxes stretch with the skeleton like text lines.
+  Before, a box that wasn't clearly wider than high kept its measured
+  width, so in a wider skeleton the content of a card stuck out of it.
+  Only circles and small boxes (icons, up to 64px) keep their size now.
+
 ## [0.2.0] - 2026-11-16
 
 ### Added

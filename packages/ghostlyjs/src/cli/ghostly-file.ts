@@ -1,5 +1,4 @@
-// Reading and writing `ghostly.json`, shared by `ghostly dev` and
-// `ghostly measure`.
+// Reading and writing `ghostly.json` for `ghostly measure`.
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
@@ -39,20 +38,4 @@ export function writeGhostlyFile(file: string, data: GhostlyData): void {
 
 export function sortByKey<T>(object: Record<string, T>): Record<string, T> {
   return Object.fromEntries(Object.entries(object).sort());
-}
-
-// Whether a value sent by a page is a measurement: `{name, breakpoint,
-// measurement}` with a box list.
-export function isMeasurementMessage(value: unknown): value is {
-  name: string;
-  breakpoint: string;
-  measurement: GhostlyData[string][string];
-} {
-  const message = value as Record<string, unknown> | null;
-  return (
-    typeof message?.name === "string" &&
-    typeof message.breakpoint === "string" &&
-    message.breakpoint !== "" &&
-    Array.isArray((message.measurement as { boxes?: unknown })?.boxes)
-  );
 }
