@@ -302,6 +302,65 @@ const pages: Record<string, string> = {
       </script>`,
   }),
   "/secret": ghostPage({ ghosts: ["secret"], send: { secret: 0 } }),
+  // A dialog that keeps its state in the URL: the tap only adds a query.
+  "/query": ghostPage({
+    ghosts: ["a"],
+    send: { a: 0 },
+    body: `
+      <button id="details">Details</button>
+      <a href="#top">Back to top</a>
+      <script>
+        document.querySelector("#details").onclick = () => {
+          history.pushState(null, "", "/query?details=1");
+          document.body.insertAdjacentHTML("beforeend", '<div data-ghost="details"></div>');
+          show("details");
+        };
+      </script>`,
+  }),
+  // "shared" shows its content on /shown only; /hides has it loading
+  // forever (like a menu a dialog covers). Each links to the other.
+  "/shown": ghostPage({
+    ghosts: ["shared"],
+    send: { shared: 0 },
+    links: ["/hides"],
+  }),
+  "/hides": ghostPage({ ghosts: ["shared"], links: ["/shown"] }),
+  // The same <Ghost> twice: hidden in a sidebar (no space) and in a sheet
+  // a tap opens.
+  "/twin": ghostPage({
+    ghosts: ["slip"],
+    send: { slip: 0 },
+    body: `
+      <button id="open">Summary</button>
+      <script>
+        let open = false;
+        measures.slip = () => ({ width: 0, height: 0, boxes: [] });
+        const sidebar = window.__ghostlyMeasureAll;
+        window.__ghostlyMeasureAll = (names) => [
+          ...sidebar(names),
+          ...(open && (!names || names.includes("slip"))
+            ? [{ name: "slip", measurement: { width: innerWidth, height: 30, boxes: [] }, parentWidth: innerWidth }]
+            : []),
+        ];
+        document.querySelector("#open").onclick = () => {
+          open = true;
+          document.body.insertAdjacentHTML("beforeend", "<p>sheet</p>");
+        };
+      </script>`,
+  }),
+  // The same <Ghost> with other data on two pages, like a detail page.
+  "/first": ghostPage({
+    ghosts: ["detail"],
+    send: { detail: 0 },
+    links: ["/second"],
+  }),
+  "/second": ghostPage({
+    ghosts: ["detail"],
+    send: { detail: 0 },
+    body: `<script>
+      measures.detail = () => ({ width: innerWidth, height: 20, boxes: [] });
+    </script>`,
+  }),
 };
 
 let server: Server;
@@ -431,6 +490,46 @@ describe.concurrent("ghostly measure", { timeout: 60_000 }, () => {
     expect(output).toMatch(/\/menu +2 ghosts · \d+ taps/);
     // Nothing was written, nobody logged out, skipped is skipped.
     expect(forbidden).toEqual({ writes: 0, logouts: 0 });
+  });
+
+  test("a tap that only changes the query is measured on the same page", async () => {
+    const { code, output, data } = await measure([
+      `${origin}/query`,
+      "--max-pages",
+      "1",
+    ]);
+    expect(code).toBe(0);
+    expect(Object.keys(data)).toEqual(["a", "details"]);
+    expect(Object.keys(data.details)).toEqual(["base", "md"]);
+    // Not a page of its own.
+    expect(output).not.toContain("?details=1");
+    expect(output).not.toContain("Stopped following links");
+  });
+
+  test("a <Ghost> measured on another page is measured everywhere", async () => {
+    const args = ["--max-pages", "2", "--wait", "300"];
+    // Measured on the first page: the second one has nothing to report.
+    const first = await measure([`${origin}/shown`, ...args]);
+    expect(first.output).toMatch(/\/hides +1 ghost/);
+    expect(first.output).not.toContain("never showed its content");
+    // Measured on the second page only: the first one reports what it
+    // saw, but in the end nothing is missing.
+    const second = await measure([`${origin}/hides`, ...args]);
+    expect(second.output).toContain('"shared" never showed its content');
+    expect(second.output).not.toContain("not measured everywhere");
+    expect(Object.keys(second.data.shared)).toEqual(["base", "md"]);
+  });
+
+  test("a <Ghost> measured hidden is measured again once a tap shows it", async () => {
+    const { data } = await measure([`${origin}/twin`, "--max-pages", "1"]);
+    expect(data.slip.base.height).toBe(30);
+    expect(data.slip.md.height).toBe(30);
+  });
+
+  test("the first page that measured a <Ghost> keeps it", async () => {
+    const { data } = await measure([`${origin}/first`, "--max-pages", "2"]);
+    expect(data.detail.base.height).toBe(10);
+    expect(data.detail.md.height).toBe(10);
   });
 
   test("--max-taps 0 taps nothing", async () => {

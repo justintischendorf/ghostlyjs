@@ -160,8 +160,17 @@ export function measurementOf(segment: Segment): GhostBoxMeasurement {
     };
   });
 
+  // Seen at more than one parent width: the content fills its parent only
+  // if it grew with it (then `widthCalc` says how). Text that just filled
+  // its line at the first width and then kept its width doesn't.
+  const { fill, ...rest } = start;
+  const parentChanged =
+    first.parentWidth !== undefined &&
+    last.parentWidth !== undefined &&
+    last.parentWidth !== first.parentWidth;
   return {
-    ...start,
+    ...rest,
+    ...(fill && (!parentChanged || widthCalc) && { fill }),
     fluid: true,
     ...(widthCalc && { widthCalc }),
     ...(heightCalc && { heightCalc }),

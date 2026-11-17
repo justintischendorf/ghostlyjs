@@ -123,6 +123,19 @@ describe("addSample", () => {
 });
 
 describe("measurementOf", () => {
+  test("text that filled its line once, then kept its width: no fill", () => {
+    const [segment] = sweep(320, 400, (width) => ({
+      measurement: {
+        ...measured(300, [box(0, 300)]),
+        ...(width === 320 && { fill: true }),
+      },
+      parentWidth: width - 20,
+    }));
+    const measurement = measurementOf(segment!);
+    expect(measurement.fill).toBeUndefined();
+    expect(measurement.widthCalc).toBeUndefined();
+  });
+
   test("content that fills its parent: 100% of it", () => {
     const [segment] = sweep(320, 400, (width) => ({
       measurement: measured(width, [box(0, width)]),
