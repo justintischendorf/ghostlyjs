@@ -75,11 +75,11 @@ export default function Home() {
               Ready to try it?
             </h2>
             <p className="text-on-accent/80">
-              Run ghostly dev and reload a page.
+              Run ghostly measure and reload a page.
             </p>
           </div>
           <code className="rounded-xl bg-on-accent/20 px-4 py-2 font-mono text-sm">
-            bunx ghostly dev
+            bunx ghostly measure http://localhost:5173
           </code>
         </section>
       </Ghost>

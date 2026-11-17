@@ -3,8 +3,13 @@
 import { act as reactAct, type ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
-import { vi, type Mock } from "vitest";
+import { vi } from "vitest";
 
+import {
+  MEASURE_ALL,
+  MEASURE_FLAG,
+  type GhostMeasureResult,
+} from "../core/index";
 import type { GhostBoxMeasurement, GhostlyEntry } from "../core/types";
 
 // Tells React that updates are wrapped in `act`, so it doesn't warn.
@@ -61,18 +66,24 @@ export function cleanup(): void {
   document.body.replaceChildren();
 }
 
-// A fake `ghostly dev`. `online: false` makes every request fail, like when
-// nothing listens on the port.
-export function mockCollector(online: boolean): Mock<() => Promise<Response>> {
-  const fetch = vi.fn(async () => {
-    if (!online) throw new TypeError("Failed to fetch");
-    return new Response(null, { status: 204 });
-  });
-  vi.stubGlobal("fetch", fetch);
-  return fetch;
+// Like the browser of `ghostly measure`: shown <Ghost>s register
+// themselves to be measured. Undone by `vi.unstubAllGlobals()`.
+export function measuring(): void {
+  vi.stubGlobal(MEASURE_FLAG, true);
 }
 
-// Lets pending promises (the collector requests) finish.
+// What `ghostly measure` gets when it measures the shown <Ghost>s.
+export function measureAll(names?: string[]): GhostMeasureResult[] {
+  const measure = (
+    window as unknown as Record<
+      string,
+      ((names?: string[]) => GhostMeasureResult[]) | undefined
+    >
+  )[MEASURE_ALL];
+  return measure ? measure(names) : [];
+}
+
+// Lets pending promises finish.
 export async function flush(): Promise<void> {
   await act(async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
