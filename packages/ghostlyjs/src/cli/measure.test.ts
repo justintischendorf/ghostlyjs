@@ -33,40 +33,25 @@ describe("parseOptions", () => {
   test("defaults", () => {
     expect(parseOptions(["http://localhost:3000"])).toEqual({
       url: "http://localhost:3000",
-      pages: [],
-      maxPages: 50,
-      maxTaps: 100,
       cookies: [],
-      wait: 3000,
     });
   });
 
-  test("all options", () => {
+  test("cookies", () => {
     expect(
       parseOptions([
         "http://localhost:3000",
-        "--pages",
-        "/a, /b,",
-        "--max-pages",
-        "5",
-        "--max-taps",
-        "0",
-        "--wait",
-        "100",
         "--cookie",
         "session=a=b",
         "--cookie",
         " theme =dark",
       ]),
-    ).toMatchObject({
-      pages: ["/a", "/b"],
-      maxPages: 5,
-      maxTaps: 0,
+    ).toEqual({
+      url: "http://localhost:3000",
       cookies: [
         { name: "session", value: "a=b" },
         { name: "theme", value: "dark" },
       ],
-      wait: 100,
     });
   });
 
@@ -75,9 +60,12 @@ describe("parseOptions", () => {
     [["a", "b"], /Pass the URL/],
     [["localhost:3000"], /not a URL/],
     [["ftp://localhost"], /not a URL/],
-    [["http://localhost", "--max-pages", "0"], /--max-pages/],
-    [["http://localhost", "--max-taps", "-1"], /--max-taps/],
-    [["http://localhost", "--wait", "soon"], /--wait/],
+    // Removed options: measure reaches every page and tap on its own.
+    [["http://localhost", "--pages", "/a"], /Unknown option "--pages"/],
+    [["http://localhost", "--prune"], /Unknown option "--prune"/],
+    [["http://localhost", "--max-pages", "5"], /Unknown option "--max-pages"/],
+    [["http://localhost", "--max-taps", "0"], /Unknown option "--max-taps"/],
+    [["http://localhost", "--wait", "100"], /Unknown option "--wait"/],
     [["http://localhost", "--cookie", "session"], /--cookie/],
     [["http://localhost", "--cookie", "=value"], /--cookie/],
     [["http://localhost", "--nope"], /Unknown option/],
@@ -194,7 +182,6 @@ const pages: Record<string, string> = {
     ],
   }),
   "/b": ghostPage({ ghosts: ["a", "never"], send: { a: 0 }, links: ["/"] }),
-  "/hidden": ghostPage({ ghosts: ["hidden"], send: { hidden: 0 } }),
   // Like a production build: <Ghost>s, but no measurements.
   "/prod": ghostPage({ ghosts: ["a"], dev: false }),
   // The same without <GhostlyProvider>: production can't be told apart.
@@ -316,7 +303,8 @@ beforeAll(async () => {
   server = createServer((request, response) => {
     const path = request.url ?? "/";
     if (path === "/api/slow") {
-      setTimeout(() => response.writeHead(200).end("{}"), 1000);
+      // Longer than the quiet time after which a page counts as done.
+      setTimeout(() => response.writeHead(200).end("{}"), 3500);
       return;
     }
     if (path === "/api/delete" || path === "/api/logout") {
@@ -381,8 +369,7 @@ async function measure(
 // Concurrent: each test runs its own process and folder.
 describe.concurrent("ghostly measure", { timeout: 60_000 }, () => {
   test("follows the links and measures every <Ghost> at every width", async () => {
-    // Longer than "late" takes, which loads without a request.
-    const { code, output, data } = await measure([origin, "--wait", "3500"]);
+    const { code, output, data } = await measure([origin]);
     expect(code).toBe(0);
     expect(output).toContain("base 320–699 · md 700–1920");
     // From each range's first width on, growing with the window: its width
@@ -411,7 +398,7 @@ describe.concurrent("ghostly measure", { timeout: 60_000 }, () => {
   });
 
   test("a layout that changes inside a range gets its own width", async () => {
-    const { data } = await measure([`${origin}/wrap`, "--max-pages", "1"]);
+    const { data } = await measure([`${origin}/wrap`]);
     expect(Object.keys(data.wrap)).toEqual([
       "base",
       "base@500",
@@ -423,11 +410,7 @@ describe.concurrent("ghostly measure", { timeout: 60_000 }, () => {
   });
 
   test("taps everything: a menu's <Ghost> and links are measured", async () => {
-    const { code, output, data } = await measure([
-      `${origin}/menu`,
-      "--max-pages",
-      "2",
-    ]);
+    const { code, output, data } = await measure([`${origin}/menu`]);
     expect(code).toBe(0);
     expect(Object.keys(data)).toEqual(["a", "menu", "secret"]);
     expect(Object.keys(data.menu)).toEqual(["base", "md"]);
@@ -437,11 +420,7 @@ describe.concurrent("ghostly measure", { timeout: 60_000 }, () => {
   });
 
   test("a tap that only changes the query is measured on the same page", async () => {
-    const { code, output, data } = await measure([
-      `${origin}/query`,
-      "--max-pages",
-      "1",
-    ]);
+    const { code, output, data } = await measure([`${origin}/query`]);
     expect(code).toBe(0);
     expect(Object.keys(data)).toEqual(["a", "details"]);
     expect(Object.keys(data.details)).toEqual(["base", "md"]);
@@ -451,70 +430,44 @@ describe.concurrent("ghostly measure", { timeout: 60_000 }, () => {
   });
 
   test("a <Ghost> measured on another page is measured everywhere", async () => {
-    const args = ["--max-pages", "2", "--wait", "300"];
     // Measured on the first page: the second one has nothing to report.
-    const first = await measure([`${origin}/shown`, ...args]);
+    const first = await measure([`${origin}/shown`]);
     expect(first.output).toMatch(/\/hides +1 ghost/);
     expect(first.output).not.toContain("never showed its content");
     // Measured on the second page only: the first one reports what it
     // saw, but in the end nothing is missing.
-    const second = await measure([`${origin}/hides`, ...args]);
+    const second = await measure([`${origin}/hides`]);
     expect(second.output).toContain('"shared" never showed its content');
     expect(second.output).not.toContain("not measured everywhere");
     expect(Object.keys(second.data.shared)).toEqual(["base", "md"]);
   });
 
   test("a <Ghost> measured hidden is measured again once a tap shows it", async () => {
-    const { data } = await measure([`${origin}/twin`, "--max-pages", "1"]);
+    const { data } = await measure([`${origin}/twin`]);
     expect(data.slip.base.height).toBe(30);
     expect(data.slip.md.height).toBe(30);
   });
 
   test("the first page that measured a <Ghost> keeps it", async () => {
-    const { data } = await measure([`${origin}/first`, "--max-pages", "2"]);
+    const { data } = await measure([`${origin}/first`]);
     expect(data.detail.base.height).toBe(10);
     expect(data.detail.md.height).toBe(10);
   });
 
-  test("--max-taps 0 taps nothing", async () => {
-    const { data } = await measure([
-      `${origin}/menu`,
-      "--max-pages",
-      "2",
-      "--max-taps",
-      "0",
-    ]);
-    expect(Object.keys(data)).toEqual(["a"]);
-  });
-
-  test("--pages adds pages no link points to", async () => {
-    const { data } = await measure([
-      `${origin}/hidden`,
-      "--pages",
-      "/plain",
-      "--max-pages",
-      "2",
-      "--wait",
-      "500",
-    ]);
-    expect(Object.keys(data)).toEqual(["a", "hidden"]);
-  });
-
   test("--cookie reaches pages behind a login", async () => {
-    const args = [`${origin}/private`, "--wait", "500"];
-    const { data } = await measure([...args, "--cookie", "session=a=b"]);
+    const { data } = await measure([
+      `${origin}/private`,
+      "--cookie",
+      "session=a=b",
+    ]);
     expect(Object.keys(data)).toEqual(["private"]);
-    const without = await measure(args);
+    const without = await measure([`${origin}/private`]);
     expect(without.output).toContain("No <Ghost> found");
   });
 
   // Bun ignores `engines` and may run the command instead of Node.
   test("runs with Bun too", async () => {
-    const { code, data } = await measure(
-      [origin, "--max-pages", "1", "--wait", "300"],
-      undefined,
-      "bun",
-    );
+    const { code, data } = await measure([origin], undefined, "bun");
     expect(code).toBe(0);
     expect(Object.keys(data.a)).toEqual(["base", "md"]);
   });
@@ -545,30 +498,9 @@ describe.concurrent("ghostly measure", { timeout: 60_000 }, () => {
     expect(output).toContain('Removed 1 ghost no page showed: "old"');
   });
 
-  test("waits for the app's requests, even longer than --wait", async () => {
-    const { data } = await measure([
-      `${origin}/api-data`,
-      "--max-pages",
-      "1",
-      "--wait",
-      "300",
-    ]);
+  test("waits for the app's requests, even longer than the quiet time", async () => {
+    const { data } = await measure([`${origin}/api-data`]);
     expect(Object.keys(data.data)).toEqual(["base", "md"]);
-  });
-
-  test("--max-pages stops following links, --wait gives up on quiet pages", async () => {
-    const { output, data } = await measure([
-      origin,
-      "--max-pages",
-      "1",
-      // Shorter than "late" takes.
-      "--wait",
-      "300",
-    ]);
-    expect(output).not.toMatch(/\/b /);
-    expect(output).toContain("Stopped following links after 1 pages");
-    expect(output).toContain('"late" never showed its content');
-    expect(Object.keys(data)).toEqual(["a"]);
   });
 
   test("a production build: stops right away, writes nothing", async () => {
@@ -585,13 +517,7 @@ describe.concurrent("ghostly measure", { timeout: 60_000 }, () => {
   });
 
   test("no measurements without a provider: hints at dev mode", async () => {
-    const { code, output, data } = await measure([
-      `${origin}/prod-plain`,
-      "--max-pages",
-      "1",
-      "--wait",
-      "300",
-    ]);
+    const { code, output, data } = await measure([`${origin}/prod-plain`]);
     expect(code).toBe(1);
     expect(output).toContain("No <Ghost> could be measured");
     expect(output).toContain("dev mode");
@@ -607,13 +533,7 @@ describe.concurrent("ghostly measure", { timeout: 60_000 }, () => {
   });
 
   test("no <Ghost> at all", async () => {
-    const { code, output } = await measure([
-      `${origin}/empty`,
-      "--max-pages",
-      "1",
-      "--wait",
-      "300",
-    ]);
+    const { code, output } = await measure([`${origin}/empty`]);
     expect(code).toBe(1);
     expect(output).toContain("No <Ghost> found on 1 page.");
     // Without <Ghost>s, the page needs no other widths.

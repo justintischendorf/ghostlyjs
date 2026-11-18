@@ -43,17 +43,9 @@ import { bar, header, progressLine, style } from "./style";
 
 export type MeasureCommandOptions = {
   url: string;
-  pages: string[];
-  maxPages: number;
-  // Taps per page and window at most, so an endless chain (a "next" button
-  // that always shows another one) ends.
-  maxTaps: number;
   // Cookies every page gets, e.g. a login session, so pages behind a
   // login can be measured too.
   cookies: { name: string; value: string }[];
-  // Quiet time (ms) after which the <Ghost>s still loading count as never
-  // loading.
-  wait: number;
 };
 
 // The smallest phones; below it, the skeletons of this width are used.
@@ -66,6 +58,15 @@ const WINDOW_HEIGHT = 900;
 const PAGE_TIMEOUT = 30_000;
 // Longest time for tapping on one page in one window.
 const TAP_TIMEOUT = 120_000;
+// Quiet time (ms) after which the <Ghost>s still loading count as never
+// loading.
+const QUIET_TIME = 3000;
+// Safety nets for apps without an end, not limits to tune: pages followed
+// at most (a calendar whose "next month" link always leads to another
+// page), and taps per page and window (a "next" button that always shows
+// another one).
+const MAX_PAGES = 1000;
+const MAX_TAPS = 500;
 // Width of the page column in the report.
 const PATH_COLUMN = 14;
 // Requests that only read. All others are blocked while tapping.
@@ -80,10 +81,6 @@ export function parseOptions(args: string[]): MeasureCommandOptions {
       args,
       allowPositionals: true,
       options: {
-        pages: { type: "string" },
-        "max-pages": { type: "string", default: "50" },
-        "max-taps": { type: "string", default: "100" },
-        wait: { type: "string", default: "3000" },
         cookie: { type: "string", multiple: true, default: [] },
       },
     });
@@ -106,18 +103,6 @@ export function parseOptions(args: string[]): MeasureCommandOptions {
   if (!URL.canParse(url) || !/^https?:$/.test(new URL(url).protocol)) {
     throw new CliError(`"${url}" is not a URL like http://localhost:3000.`);
   }
-  const maxPages = Number(values["max-pages"]);
-  const maxTaps = Number(values["max-taps"]);
-  const wait = Number(values.wait);
-  if (!Number.isInteger(maxPages) || maxPages < 1) {
-    throw new CliError("--max-pages needs a whole number of at least 1.");
-  }
-  if (!Number.isInteger(maxTaps) || maxTaps < 0) {
-    throw new CliError("--max-taps needs a whole number, 0 for no taps.");
-  }
-  if (!Number.isFinite(wait) || wait < 0) {
-    throw new CliError("--wait needs a number of milliseconds.");
-  }
   // "name=value"; the value may contain "=" itself.
   const cookies = values.cookie.map((cookie) => {
     const split = cookie.indexOf("=");
@@ -127,17 +112,7 @@ export function parseOptions(args: string[]): MeasureCommandOptions {
     }
     return { name, value: cookie.slice(split + 1) };
   });
-  return {
-    url,
-    pages: (values.pages ?? "")
-      .split(",")
-      .map((page) => page.trim())
-      .filter(Boolean),
-    maxPages,
-    maxTaps,
-    cookies,
-    wait,
-  };
+  return { url, cookies };
 }
 
 // A breakpoint range as measured: every window width from `start` to
@@ -290,10 +265,6 @@ async function measureApp(
   );
 
   const queue = [start];
-  for (const page of options.pages) {
-    const path = pageOf(page, origin);
-    if (path && !queue.includes(path)) queue.push(path);
-  }
   let skippedPages = 0;
   const measured: GhostlyData = {};
   // Every <Ghost> that showed up, measured or not.
@@ -320,7 +291,7 @@ async function measureApp(
       ranges.map(async (range) => {
         const context = await newContext(browser, origin, options);
         try {
-          return await visitPage(context, origin + path, range, options);
+          return await visitPage(context, origin + path, range);
         } finally {
           await context.close();
           done++;
@@ -359,7 +330,7 @@ async function measureApp(
       for (const link of visit.links) {
         const linked = pageOf(link, origin);
         if (!linked || queue.includes(linked)) continue;
-        if (queue.length < options.maxPages) queue.push(linked);
+        if (queue.length < MAX_PAGES) queue.push(linked);
         else skippedPages++;
       }
     }
@@ -401,10 +372,7 @@ async function measureApp(
   }
 
   if (skippedPages > 0) {
-    log.warn(
-      `Stopped following links after ${options.maxPages} pages ` +
-        style("dim", "(--max-pages)"),
-    );
+    log.warn(`Stopped following links after ${MAX_PAGES} pages`);
   }
   const names = Object.keys(measured);
   if (names.length === 0) {
@@ -437,7 +405,7 @@ async function measureApp(
       `${plural(incomplete.length, "ghost")} not measured everywhere.\n` +
         style(
           "dim",
-          "Is their content behind a page no link points to? Add it with --pages.",
+          "Is their content on a page no link points to, or behind more than a tap?",
         ),
     );
   }
@@ -507,7 +475,6 @@ async function visitPage(
   context: BrowserContext,
   url: string,
   range: MeasuredRange,
-  options: MeasureCommandOptions,
 ): Promise<Visit> {
   const page = await context.newPage();
   await page.setViewportSize({ width: range.start, height: WINDOW_HEIGHT });
@@ -580,18 +547,18 @@ async function visitPage(
       // All done; the short pause lets a late web font arrive.
       if (allShown && now.fontsLoaded && quiet >= 300) break;
       // Nothing happens anymore; what still loads counts as never loading.
-      if (loading.size === 0 && quiet >= options.wait) break;
+      if (loading.size === 0 && quiet >= QUIET_TIME) break;
       await page.waitForTimeout(100);
     }
     return undefined;
   };
 
   // Waits until a tap is done: no request running and the page unchanged
-  // for a moment. At most `--wait`.
+  // for a moment. At most QUIET_TIME.
   const settle = async (): Promise<void> => {
     const started = Date.now();
     await page.waitForTimeout(50);
-    while (Date.now() - started < Math.max(options.wait, 500)) {
+    while (Date.now() - started < QUIET_TIME) {
       const now = await state();
       for (const name of now.ghosts) visit.ghosts.add(name);
       if (
@@ -651,16 +618,14 @@ async function visitPage(
     if (error) return { ...visit, error };
     await measureNew();
     await collectLinks();
-    if (options.maxTaps > 0) {
-      await tapEverything(page, url, options, {
-        settle,
-        load,
-        measureNew,
-        collectLinks,
-        tapped: () => visit.taps++,
-        navigated: (link) => visit.links.add(link),
-      });
-    }
+    await tapEverything(page, url, {
+      settle,
+      load,
+      measureNew,
+      collectLinks,
+      tapped: () => visit.taps++,
+      navigated: (link) => visit.links.add(link),
+    });
     return visit;
   } catch (error) {
     return { ...visit, error: (error as Error).message.split("\n")[0] ?? "" };
@@ -820,7 +785,6 @@ async function measureAt(
 async function tapEverything(
   page: Page,
   url: string,
-  options: MeasureCommandOptions,
   hooks: {
     settle: () => Promise<void>;
     load: () => Promise<string | undefined>;
@@ -842,7 +806,7 @@ async function tapEverything(
   const appeared = new Map<string, number>();
   let taps = 0;
 
-  while (taps < options.maxTaps && Date.now() - started < TAP_TIMEOUT) {
+  while (taps < MAX_TAPS && Date.now() - started < TAP_TIMEOUT) {
     const candidates = await tappable(page);
     for (const { key } of candidates) {
       if (!appeared.has(key)) appeared.set(key, taps);

@@ -65,9 +65,6 @@ test("ghostly measure measures every page at every breakpoint", async ({
         cli,
         "measure",
         baseURL!,
-        // No link points to it.
-        "--pages",
-        "/admin",
         // The pretend login of the account page.
         "--cookie",
         "session=playground",
