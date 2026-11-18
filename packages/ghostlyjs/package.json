@@ -1,6 +1,6 @@
 {
   "name": "ghostlyjs",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Auto-generate skeleton loaders for React by measuring your real UI. No more hand-written skeletons.",
   "keywords": [
     "react",
