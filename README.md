@@ -159,22 +159,12 @@ npx ghostly measure http://localhost:3000
 It opens every page of your app in a headless browser, one window per
 breakpoint, and in each window:
 
-1. **waits** until every `<Ghost>` shows its content,
-2. **measures** it across the whole breakpoint, exact to the pixel. Where
-   the layout changes inside a breakpoint (buttons that wrap at 390px, a
-   line of text more), it stores another measurement from that width on,
-3. **taps** every button, tab, menu, dialog and accordion, one after the
-   other, and measures each `<Ghost>` that only shows up then. Links it
-   finds, also in opened menus, are measured as pages of their own.
-
 Each run builds `ghostly.json` anew: ghosts no page showed anymore
 (renamed, deleted) are gone, and nothing old is mixed in. It only reaches
-pages a link points to, so link every page, e.g. from the footer. The
-routes of a hash router (`#/orders`) count as pages too.
+pages a link points to, so link every page.
 
 For pages behind a login, copy your session cookie from the browser's dev
-tools (Application → Cookies) and pass it with `--cookie`, the only option
-of `ghostly measure` (repeat it for more cookies):
+tools (Application → Cookies) and pass it with `--cookie`.
 
 ```bash
 npx ghostly measure http://localhost:3000 --cookie "session=..."
@@ -184,9 +174,7 @@ npx ghostly measure http://localhost:3000 --cookie "session=..."
 > Tapping can't change your data: while it taps, every request that would
 > write (`POST`, `PUT`, `PATCH`, `DELETE`) is blocked, so "Delete account"
 > deletes nothing. Buttons and links that log out (`Log out`, `Sign out`,
-> `/logout`) are never tapped or opened. To keep `ghostly measure` away
-> from anything else, mark it with `data-ghostly-skip`; nothing inside it
-> is tapped.
+> `/logout`) are never tapped or opened.
 
 Reload the page: while `isLoading` is `true`, each `<Ghost>` shows its
 skeleton.
@@ -209,10 +197,6 @@ skeleton.
 - **`isLoading`**: `true` shows the skeleton, `false` the children.
 - **Wrap the content itself**, not a component that renders its own
   loading state. The `<Ghost>` measures exactly what it wraps.
-- **One element inside** when the `<Ghost>` sits directly in a grid or
-  flex container. Its children become items of that container (a heading
-  in one column, a paragraph in the next), but the skeleton is a single
-  item. Wrap them in a `<div>`, and the skeleton takes their place.
 
 > [!NOTE]
 > A `<Ghost>` that was never measured shows a single placeholder bar, so the
@@ -314,29 +298,6 @@ the breakpoint. Where the layout changes inside a breakpoint, like buttons
 that wrap, `ghostly.json` gets another entry from that width on, e.g.
 `"base@390"`.
 
-### Content behind a tap with `isMeasuring()`
-
-`ghostly measure` taps everything to reach content that only shows after a
-tap. If that's not enough (it needs typing, or a tap would be blocked as a
-write), show the content right away while measuring. `isMeasuring()` is
-`true` only in the browser of `ghostly measure`; check it in an effect,
-since the server doesn't know:
-
-```tsx
-import { isMeasuring } from "ghostlyjs";
-
-useEffect(() => {
-  if (isMeasuring()) setShowResults(true);
-}, []);
-```
-
-### Types
-
-```ts
-import type { GhostProps, GhostlyProviderProps } from "ghostlyjs";
-import type { Breakpoints, GhostlyData } from "ghostlyjs/core";
-```
-
 <img src="https://raw.githubusercontent.com/justintischendorf/ghostlyjs/main/assets/divider.svg" width="100%" alt="" />
 
 ## 🎨 Styling
@@ -364,20 +325,6 @@ in your own CSS:
 <img src="https://raw.githubusercontent.com/justintischendorf/ghostlyjs/main/assets/divider.svg" width="100%" alt="" />
 
 ## 🩺 Troubleshooting
-
-#### A `<Ghost>` shows a single grey bar
-
-It was never measured. Run `ghostly measure`. If it reports that the
-`<Ghost>` never showed its content, it loads too slowly (no request runs
-and nothing on the page changes for 3 seconds), sits on a page no link
-points to (link it, e.g. from the footer), or needs more than taps (use
-[`isMeasuring()`](#content-behind-a-tap-with-ismeasuring)).
-
-#### A tap does something it shouldn't, or misses something
-
-Run `GHOSTLY_DEBUG=1 npx ghostly measure <url>` to see every tap, per
-page and window width. Mark elements it should leave alone with
-`data-ghostly-skip`.
 
 #### "`ghostly dev` was removed"
 
