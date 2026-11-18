@@ -4,7 +4,7 @@ import { useLoading } from "@/components/loading";
 import { jobs, log } from "@/lib/data";
 import { Ghost } from "ghostlyjs";
 
-// No link points here: `ghostly measure --pages /admin` measures it.
+// Only the footer links here.
 export default function Admin() {
   const { isLoading } = useLoading();
 
