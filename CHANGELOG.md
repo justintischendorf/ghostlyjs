@@ -16,8 +16,6 @@ and this project adheres to
   followed. While tapping, every request that would write (`POST`, `PUT`,
   `PATCH`, `DELETE`) is blocked, buttons and links that log out are never
   tapped, and `data-ghostly-skip` keeps it away from anything else.
-  `--max-taps <n>` (default 100, `0` for none) limits the taps per page
-  and breakpoint.
 - `ghostly measure` measures each breakpoint across all its widths, exact
   to the pixel, from 320px (the smallest phones) up to 1920px. Where the
   layout changes inside a breakpoint (buttons that wrap at 390px, text
@@ -36,20 +34,25 @@ and this project adheres to
   overview with a sidebar, cards on three pages with other content each,
   filters and a summary that is a sidebar or a sheet, collections as a
   grid or a list and a detail page per collection, charts, account
-  settings behind a pretend login, a sign-in page, an admin page no link
-  points to, real async loading and over 40 edge cases. It has tabs,
+  settings behind a pretend login, a sign-in and an admin page only the
+  footer links to, real async loading and over 40 edge cases. It has tabs,
   menus, popovers, dialogs (one opens by its URL, `?item=5`), an
   accordion, buttons that log out or write, and a part marked
   `data-ghostly-skip`. The Next.js and the Vite playground share the same
   components and pages.
 - E2E tests first run `ghostly measure` against both playgrounds (with
-  `--pages` and `--cookie`), then check every page and every state a tap
+  `--cookie`), then check every page and every state a tap
   reaches against what it measured: on a phone, and in a desktop window
   resized from 320 to 1920px, at each breakpoint and at widths inside
   them. Each state loads once, so the whole run takes a few minutes.
 
 ### Changed
 
+- `ghostly measure` builds `ghostly.json` anew on every run instead of
+  merging into it: ghosts no page showed anymore (renamed, deleted) are
+  removed, and no old measurement stays next to the new ones. A broken
+  `ghostly.json` (merge conflict markers) is replaced instead of being an
+  error.
 - A `<Ghost>` that shows other data on several pages (the header on the
   page of each group) keeps the measurement of the first page measured,
   not of the last. So a new page doesn't change its skeleton.
@@ -59,7 +62,12 @@ and this project adheres to
 - `ghostly dev` and its collector on port 6767. `ghostly measure` reaches
   everything it was needed for. `<Ghost>` no longer sends requests in dev
   mode, so the console hint about a missing `ghostly dev` is gone too.
-  Measure again with `ghostly measure --prune` once.
+  Measure again with `ghostly measure` once.
+- The options `--pages`, `--prune`, `--max-pages`, `--max-taps` and
+  `--wait` of `ghostly measure`. It reaches every page a link points to
+  and every `<Ghost>` behind a tap on its own, and builds `ghostly.json`
+  anew each time, so `--cookie` is the only option left. Link to a page
+  no link pointed to yet, e.g. from the footer.
 - `hideClass` from `ghostlyjs/core`. Variants are hidden with
   `fromClass` / `toClass` now, and `variantsOf` returns `from` and `to`
   widths instead of range indexes.
