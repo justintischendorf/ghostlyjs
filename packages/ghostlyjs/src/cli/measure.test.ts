@@ -114,6 +114,12 @@ describe("pageOf", () => {
     // It would end the login session.
     ["/logout", undefined],
     ["/auth/sign-out?next=/", undefined],
+    // The routes of a hash router are pages, other hashes are not.
+    ["/#/orders", "/#/orders"],
+    ["/app?x=1#!/orders/2", "/app?x=1#!/orders/2"],
+    ["/#top", "/"],
+    ["/#/", "/"],
+    ["/#/logout", undefined],
   ])("%s → %s", (href, page) => {
     expect(pageOf(href, origin)).toBe(page);
   });
@@ -279,6 +285,89 @@ const pages: Record<string, string> = {
         };
       </script>`,
   }),
+  // A tab whose <Ghost> loads after the tap, without a request and
+  // without changing the page until it shows (a timer, a cache).
+  "/tab": ghostPage({
+    ghosts: ["a"],
+    send: { a: 0 },
+    body: `
+      <button role="tab" id="tab">Projects</button>
+      <script>
+        document.querySelector("#tab").onclick = () => {
+          if (document.querySelector('[data-ghost="projects"]')) return;
+          document.body.insertAdjacentHTML(
+            "beforeend",
+            '<div data-ghost="projects" class="ghostly-skeleton"></div>',
+          );
+          setTimeout(() => show("projects"), 600);
+        };
+      </script>`,
+  }),
+  // Views that swap the content without changing the URL: "Reveal" only
+  // shows in the first one, and "Second" is tapped before it.
+  "/views": ghostPage({
+    ghosts: ["a"],
+    send: { a: 0 },
+    body: `
+      <button id="first">First</button>
+      <button id="second">Second</button>
+      <div id="view"><button id="reveal">Reveal</button></div>
+      <script>
+        const view = document.querySelector("#view");
+        document.querySelector("#first").onclick = () => {
+          if (!view.querySelector("#reveal")) location.reload();
+        };
+        document.querySelector("#second").onclick = () => {
+          view.innerHTML = "<p>Second view</p>";
+        };
+        view.querySelector("#reveal").onclick = () => {
+          view.insertAdjacentHTML("beforeend", '<div data-ghost="revealed"></div>');
+          show("revealed");
+        };
+      </script>`,
+  }),
+  // Radios without text of their own, inside a <label>: each one is
+  // tapped, not only the first one that looks the same.
+  "/radios": ghostPage({
+    ghosts: ["a"],
+    send: { a: 0 },
+    body: `
+      <label><input type="radio" name="f" checked> All</label>
+      <label><input type="radio" name="f" id="open"> Open</label>
+      <script>
+        document.querySelector("#open").onchange = () => {
+          document.body.insertAdjacentHTML("beforeend", '<div data-ghost="open"></div>');
+          show("open");
+        };
+      </script>`,
+  }),
+  // A form that posts: blocked like any write, and the page goes on.
+  "/form": ghostPage({
+    ghosts: ["a"],
+    send: { a: 0 },
+    body: `
+      <form method="post" action="/api/delete"><button>Send</button></form>
+      <button id="more">More</button>
+      <script>
+        document.querySelector("#more").onclick = () => {
+          document.body.insertAdjacentHTML("beforeend", '<div data-ghost="more"></div>');
+          show("more");
+        };
+      </script>`,
+  }),
+  // A hash router: each route shows other <Ghost>s, linked as `#/...`.
+  "/hash": ghostPage({
+    body: `
+      <a href="#/one">One</a> <a href="#/two">Two</a> <a href="#top">Top</a>
+      <script>
+        const route = location.hash || "#/";
+        const name = { "#/": "home", "#/one": "one", "#/two": "two" }[route];
+        if (name) {
+          document.body.insertAdjacentHTML("beforeend", \`<div data-ghost="\${name}" class="ghostly-skeleton"></div>\`);
+          setTimeout(() => show(name), 0);
+        }
+      </script>`,
+  }),
   // The same <Ghost> with other data on two pages, like a detail page.
   "/first": ghostPage({
     ghosts: ["detail"],
@@ -429,6 +518,44 @@ describe.concurrent("ghostly measure", { timeout: 60_000 }, () => {
     expect(output).not.toContain("Stopped following links");
   });
 
+  test("waits for a <Ghost> a tap starts loading, also without a request", async () => {
+    const { code, output, data } = await measure([`${origin}/tab`]);
+    expect(code).toBe(0);
+    expect(Object.keys(data)).toEqual(["a", "projects"]);
+    expect(Object.keys(data.projects)).toEqual(["base", "md"]);
+    expect(output).not.toContain("never showed its content");
+  });
+
+  test("reaches buttons a view switch without a URL change removed", async () => {
+    const { code, data } = await measure([`${origin}/views`]);
+    expect(code).toBe(0);
+    expect(Object.keys(data)).toEqual(["a", "revealed"]);
+    expect(Object.keys(data.revealed)).toEqual(["base", "md"]);
+  });
+
+  test("taps each radio, labelled by its <label>", async () => {
+    const { code, data } = await measure([`${origin}/radios`]);
+    expect(code).toBe(0);
+    expect(Object.keys(data)).toEqual(["a", "open"]);
+  });
+
+  test("a form that posts is blocked, the page goes on", async () => {
+    const { code, output, data } = await measure([`${origin}/form`]);
+    expect(code).toBe(0);
+    expect(output).not.toContain("Execution context");
+    expect(output).toMatch(/\/form +2 ghosts/);
+    expect(Object.keys(data)).toEqual(["a", "more"]);
+    expect(forbidden.writes).toBe(0);
+  });
+
+  test("measures each route of a hash router as a page", async () => {
+    const { code, output, data } = await measure([`${origin}/hash`]);
+    expect(code).toBe(0);
+    expect(Object.keys(data)).toEqual(["home", "one", "two"]);
+    expect(output).toMatch(/\/hash#\/one +1 ghost/);
+    expect(output).not.toContain("#top");
+  });
+
   test("a <Ghost> measured on another page is measured everywhere", async () => {
     // Measured on the first page: the second one has nothing to report.
     const first = await measure([`${origin}/shown`]);
@@ -562,8 +689,12 @@ describe.concurrent("ghostly measure", { timeout: 60_000 }, () => {
   });
 
   test("a broken ghostly.json is replaced", async () => {
-    const { code, data } = await measure([`${origin}/plain`], "<<<<<<< HEAD\n");
+    const { code, output, data } = await measure(
+      [`${origin}/plain`],
+      "<<<<<<< HEAD\n",
+    );
     expect(code).toBe(0);
     expect(Object.keys(data)).toEqual(["a"]);
+    expect(output).toContain("ghostly.json was broken");
   });
 });

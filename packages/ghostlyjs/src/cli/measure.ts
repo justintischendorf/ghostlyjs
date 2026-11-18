@@ -34,11 +34,7 @@ import {
 import type { Breakpoints, GhostlyData, GhostlyEntry } from "../core/types";
 import { CliError } from "./cli-error";
 import { fits, measurementOf, type Sample, type Segment } from "./fit";
-import {
-  ghostlyFile,
-  readOldGhostlyFile,
-  writeGhostlyFile,
-} from "./ghostly-file";
+import { ghostlyFile, readGhostlyFile, writeGhostlyFile } from "./ghostly-file";
 import { bar, header, progressLine, style } from "./style";
 
 export type MeasureCommandOptions = {
@@ -131,14 +127,20 @@ export function measuredRangesOf(breakpoints: Breakpoints): MeasuredRange[] {
 }
 
 // Path and query of a link to the app, or undefined for other sites and
-// for logout links. The hash is dropped: it's the same page.
+// for logout links. The hash is dropped: it's the same page. Only the
+// route of a hash router (`#/orders`, `#!/orders`) is a page of its own.
 export function pageOf(href: string, origin: string): string | undefined {
   if (!URL.canParse(href, origin)) return undefined;
   const url = new URL(href, origin);
   if (url.origin !== origin) return undefined;
-  if (LOGOUT.test(url.pathname)) return undefined;
-  return url.pathname + url.search;
+  const route = routeOf(url);
+  if (LOGOUT.test(url.pathname + route)) return undefined;
+  return url.pathname + url.search + route;
 }
+
+// The route of a hash router in the URL, or "". Its start (`#/`) is the
+// page itself.
+const routeOf = (url: URL) => (/^#!?\/./.test(url.hash) ? url.hash : "");
 
 const breakpointPart = (key: string) => key.split("@")[0] ?? key;
 
@@ -151,6 +153,18 @@ export async function runMeasure(args: string[]): Promise<void> {
   intro("Measuring every page at every width");
   const options = parseOptions(args);
   const origin = new URL(options.url).origin;
+  // Measured anew anyway, but the app imports the file: broken, it can't
+  // show a single <Ghost>. Emptied first, so the dev server picks it up
+  // before the first page loads. A file that is fine stays until the end,
+  // so stopping halfway loses nothing.
+  const file = ghostlyFile();
+  const before = readGhostlyFile(file);
+  if (before === "broken") {
+    writeGhostlyFile(file, {});
+    log.warn(
+      "ghostly.json was broken (e.g. a merge conflict) and is measured anew.",
+    );
+  }
   try {
     await fetch(options.url);
   } catch {
@@ -387,10 +401,13 @@ async function measureApp(
   // Built anew from what this run measured: ghosts no page showed anymore
   // (renamed, deleted) are gone, and nothing old is mixed in.
   const file = ghostlyFile();
-  const before = Object.keys(readOldGhostlyFile(file));
+  const before = readGhostlyFile(file);
   writeGhostlyFile(file, measured);
 
-  const removed = before.filter((name) => !(name in measured));
+  const removed =
+    before === "broken"
+      ? []
+      : Object.keys(before).filter((name) => !(name in measured));
   if (removed.length > 0) {
     log.success(
       `Removed ${plural(removed.length, "ghost")} no page showed: ` +
@@ -503,21 +520,23 @@ async function visitPage(
   page.on("popup", (popup) => void popup.close().catch(() => {}));
 
   const state = (): Promise<PageState> =>
-    page.evaluate(() => {
-      const ghosts = [...document.querySelectorAll("[data-ghost]")];
-      const isSkeleton = (element: Element) =>
-        element.matches(".ghostly-skeleton, .ghostly-placeholder");
-      const changed = (window as unknown as { __ghostlyChanged?: number })
-        .__ghostlyChanged;
-      return {
-        ghosts: ghosts.map((element) => element.getAttribute("data-ghost")!),
-        shown: ghosts
-          .filter((element) => !isSkeleton(element))
-          .map((element) => element.getAttribute("data-ghost")!),
-        fontsLoaded: document.fonts.status === "loaded",
-        sinceChange: performance.now() - (changed ?? 0),
-      };
-    });
+    readPage(page, () =>
+      page.evaluate(() => {
+        const ghosts = [...document.querySelectorAll("[data-ghost]")];
+        const isSkeleton = (element: Element) =>
+          element.matches(".ghostly-skeleton, .ghostly-placeholder");
+        const changed = (window as unknown as { __ghostlyChanged?: number })
+          .__ghostlyChanged;
+        return {
+          ghosts: ghosts.map((element) => element.getAttribute("data-ghost")!),
+          shown: ghosts
+            .filter((element) => !isSkeleton(element))
+            .map((element) => element.getAttribute("data-ghost")!),
+          fontsLoaded: document.fonts.status === "loaded",
+          sinceChange: performance.now() - (changed ?? 0),
+        };
+      }),
+    );
 
   // Opens the page and waits until every <Ghost> shows its content, or
   // until nothing happens on the page for a while.
@@ -553,19 +572,40 @@ async function visitPage(
     return undefined;
   };
 
+  // The <Ghost>s loading right now, to tell which ones a tap starts.
+  const loadingNow = async (): Promise<Set<string>> => {
+    const now = await state();
+    return new Set(now.ghosts.filter((name) => !now.shown.includes(name)));
+  };
+
   // Waits until a tap is done: no request running and the page unchanged
-  // for a moment. At most QUIET_TIME.
-  const settle = async (): Promise<void> => {
+  // for a moment. At most QUIET_TIME. A <Ghost> that started loading with
+  // the tap (`loadingBefore` didn't have it) may load without a request
+  // and without changing the page (a timer, a cache, a worker): it is
+  // waited for like on load, until it shows its content or the page stays
+  // quiet for QUIET_TIME.
+  const settle = async (loadingBefore?: Set<string>): Promise<void> => {
     const started = Date.now();
     await page.waitForTimeout(50);
-    while (Date.now() - started < QUIET_TIME) {
+    while (Date.now() - started < PAGE_TIMEOUT) {
       const now = await state();
       for (const name of now.ghosts) visit.ghosts.add(name);
-      if (
+      const quiet =
         loading.size === 0 &&
         now.sinceChange >= 150 &&
-        Date.now() - lastActivity >= 150
+        Date.now() - lastActivity >= 150;
+      const waiting = loadingBefore
+        ? now.ghosts.some(
+            (name) => !now.shown.includes(name) && !loadingBefore.has(name),
+          )
+        : false;
+      if (!waiting) {
+        if (quiet || Date.now() - started >= QUIET_TIME) return;
+      } else if (
+        loading.size === 0 &&
+        Math.min(now.sinceChange, Date.now() - lastActivity) >= QUIET_TIME
       ) {
+        // Still loading, but nothing happens anymore: never loads.
         return;
       }
       await page.waitForTimeout(50);
@@ -601,14 +641,18 @@ async function visitPage(
 
   // Links to pages, not to files (`download`) or to a place on this page
   // (`#top`): that one resolves to the current URL, also to a query a tap
-  // added (`?item=3#top`), which is no page of its own.
+  // added (`?item=3#top`), which is no page of its own. The routes of a
+  // hash router (`#/orders`) are pages.
   const collectLinks = async (): Promise<void> => {
-    const links = await page.evaluate(() =>
-      [
-        ...document.querySelectorAll(
-          'a[href]:not([download]):not([href^="#"])',
-        ),
-      ].map((link) => (link as HTMLAnchorElement).href),
+    const links = await readPage(page, () =>
+      page.evaluate(() =>
+        [...document.querySelectorAll("a[href]:not([download])")]
+          .filter((link) => {
+            const href = link.getAttribute("href") ?? "";
+            return !href.startsWith("#") || /^#!?\//.test(href);
+          })
+          .map((link) => (link as HTMLAnchorElement).href),
+      ),
     );
     for (const link of links) visit.links.add(link);
   };
@@ -620,6 +664,7 @@ async function visitPage(
     await collectLinks();
     await tapEverything(page, url, {
       settle,
+      loadingNow,
       load,
       measureNew,
       collectLinks,
@@ -631,6 +676,23 @@ async function visitPage(
     return { ...visit, error: (error as Error).message.split("\n")[0] ?? "" };
   } finally {
     await page.close();
+  }
+}
+
+// Reads the page. A tap may start a navigation while it is read (a form
+// that posts, blocked, shows an error page; `location.href = ...`): read
+// again once the new document is there, instead of failing the page.
+async function readPage<T>(page: Page, read: () => Promise<T>): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await read();
+    } catch (error) {
+      const navigated = /Execution context was destroyed|navigat/i.test(
+        (error as Error).message,
+      );
+      if (!navigated || attempt >= 5) throw error;
+      await page.waitForLoadState("domcontentloaded").catch(() => {});
+    }
   }
 }
 
@@ -759,22 +821,24 @@ async function measureAt(
   page: Page,
   names: string[],
 ): Promise<GhostMeasureResult[]> {
-  return page.evaluate(
-    ([names, measureAll]) =>
-      new Promise<GhostMeasureResult[]>((done) =>
-        requestAnimationFrame(() =>
-          requestAnimationFrame(() => {
-            const measure = (
-              window as unknown as Record<
-                string,
-                ((names: string[]) => GhostMeasureResult[]) | undefined
-              >
-            )[measureAll];
-            done(names.length > 0 && measure ? measure(names) : []);
-          }),
+  return readPage(page, () =>
+    page.evaluate(
+      ([names, measureAll]) =>
+        new Promise<GhostMeasureResult[]>((done) =>
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() => {
+              const measure = (
+                window as unknown as Record<
+                  string,
+                  ((names: string[]) => GhostMeasureResult[]) | undefined
+                >
+              )[measureAll];
+              done(names.length > 0 && measure ? measure(names) : []);
+            }),
+          ),
         ),
-      ),
-    [names, MEASURE_ALL] as const,
+      [names, MEASURE_ALL] as const,
+    ),
   );
 }
 
@@ -786,7 +850,8 @@ async function tapEverything(
   page: Page,
   url: string,
   hooks: {
-    settle: () => Promise<void>;
+    settle: (loadingBefore?: Set<string>) => Promise<void>;
+    loadingNow: () => Promise<Set<string>>;
     load: () => Promise<string | undefined>;
     measureNew: () => Promise<void>;
     collectLinks: () => Promise<void>;
@@ -805,6 +870,9 @@ async function tapEverything(
   // When each element showed up first: the number of taps before.
   const appeared = new Map<string, number>();
   let taps = 0;
+  // Loaded again and nothing tapped since: what is still missing can't be
+  // reached from the start of the page either.
+  let reloaded = false;
 
   while (taps < MAX_TAPS && Date.now() - started < TAP_TIMEOUT) {
     const candidates = await tappable(page);
@@ -812,7 +880,16 @@ async function tapEverything(
       if (!appeared.has(key)) appeared.set(key, taps);
     }
     const open = candidates.filter(({ key }) => !done.has(key));
-    if (open.length === 0) break;
+    if (open.length === 0) {
+      // Elements seen before are gone: a tap switched the view without
+      // changing the URL (tabs that swap the content, a wizard). They
+      // show again at the start of the page, so it is loaded again.
+      const missed = [...appeared.keys()].some((key) => !done.has(key));
+      if (!missed || reloaded) break;
+      reloaded = true;
+      if (await hooks.load()) return;
+      continue;
+    }
     // The newest ones, in the order of the page.
     const newest = Math.max(...open.map(({ key }) => appeared.get(key) ?? 0));
     const next = open.find(({ key }) => appeared.get(key) === newest);
@@ -829,6 +906,7 @@ async function tapEverything(
       await page.keyboard.press("Escape").catch(() => {});
       await hooks.settle();
     }
+    const loadingBefore = await hooks.loadingNow();
     try {
       await target.click({ timeout: 1000 });
     } catch {
@@ -843,8 +921,9 @@ async function tapEverything(
     }
     debug(page, `tapped ${next.key}`);
     taps++;
+    reloaded = false;
     hooks.tapped();
-    await hooks.settle();
+    await hooks.settle(loadingBefore);
     // A menu that opens on hover (another menu was open) was opened by the
     // pointer and closed again by the tap: tap once more to open it.
     const expanded = await target
@@ -852,13 +931,20 @@ async function tapEverything(
       .catch(() => null);
     if (expanded === "false") {
       await target.click({ timeout: 1000 }).catch(() => {});
-      await hooks.settle();
+      await hooks.settle(loadingBefore);
     }
 
     // The tap went to another page: that one is measured on its own. Only
     // another query (`?item=3`, a dialog or tab that keeps its state in
     // the URL) is the same page: what it shows is measured right here.
-    if (new URL(page.url()).pathname !== new URL(url).pathname) {
+    // A blocked form post lands on Chrome's error page, another origin.
+    const now = new URL(page.url());
+    const start = new URL(url);
+    if (
+      now.origin !== start.origin ||
+      now.pathname !== start.pathname ||
+      routeOf(now) !== routeOf(start)
+    ) {
       hooks.navigated(page.url());
       if (await hooks.load()) return;
       continue;
@@ -881,77 +967,84 @@ function debug(page: Page, message: string): void {
 // enabled. Each gets a `data-ghostly-tap` id to tap it by, and a key that
 // is the same for elements that look the same.
 async function tappable(page: Page): Promise<{ id: string; key: string }[]> {
-  return page.evaluate((logout) => {
-    const selector = [
-      "button",
-      "summary",
-      "input[type=checkbox]",
-      "input[type=radio]",
-      "[role=button]",
-      "[role=tab]",
-      "[role=menuitem]",
-      "[role=menuitemcheckbox]",
-      "[role=menuitemradio]",
-      "[role=option]",
-      "[role=combobox]",
-      "[role=switch]",
-      "[role=checkbox]",
-      "[role=radio]",
-      "[role=treeitem]",
-      "[aria-haspopup]:not([aria-haspopup=false])",
-      "[aria-expanded]",
-    ].join(",");
-    const pattern = new RegExp(logout, "i");
-    // What the element says: its label or text, short.
-    const labelOf = (element: HTMLElement) =>
-      (
-        element.getAttribute("aria-label") ||
-        element.title ||
-        element.innerText ||
-        ""
-      )
-        .trim()
-        .slice(0, 80);
-    const counter = window as unknown as { __ghostlyTapId?: number };
-    return [...document.querySelectorAll<HTMLElement>(selector)]
-      .filter((element) => {
-        // Links are pages of their own; skipped on purpose, or disabled.
-        if (element.matches("a[href]")) return false;
-        if (element.closest("[data-ghostly-skip]")) return false;
-        if (
-          (element as HTMLButtonElement).disabled ||
-          element.closest("[aria-disabled=true], fieldset:disabled, [inert]")
-        ) {
-          return false;
-        }
-        const rect = element.getBoundingClientRect();
-        if (rect.width === 0 || rect.height === 0) return false;
-        if (
-          !element.checkVisibility({
-            opacityProperty: true,
-            visibilityProperty: true,
-          })
-        ) {
-          return false;
-        }
-        const label = labelOf(element);
-        return !pattern.test(label);
-      })
-      .map((element) => {
-        element.dataset.ghostlyTap ??= String(
-          (counter.__ghostlyTapId = (counter.__ghostlyTapId ?? 0) + 1),
-        );
-        const className =
-          typeof element.className === "string" ? element.className : "";
-        return {
-          id: element.dataset.ghostlyTap,
-          key: [
-            element.localName,
-            element.getAttribute("role") ?? "",
-            labelOf(element),
-            className.slice(0, 200),
-          ].join("|"),
-        };
-      });
-  }, LOGOUT.source);
+  return readPage(page, () =>
+    page.evaluate((logout) => {
+      const selector = [
+        "button",
+        "summary",
+        "input[type=checkbox]",
+        "input[type=radio]",
+        "[role=button]",
+        "[role=tab]",
+        "[role=menuitem]",
+        "[role=menuitemcheckbox]",
+        "[role=menuitemradio]",
+        "[role=option]",
+        "[role=combobox]",
+        "[role=switch]",
+        "[role=checkbox]",
+        "[role=radio]",
+        "[role=treeitem]",
+        "[aria-haspopup]:not([aria-haspopup=false])",
+        "[aria-expanded]",
+      ].join(",");
+      const pattern = new RegExp(logout, "i");
+      // What the element says: its label or text, short. A checkbox or radio
+      // has no text of its own; it says what its <label> says, or its value.
+      const labelOf = (element: HTMLElement) => {
+        const input = element as HTMLInputElement;
+        return (
+          element.getAttribute("aria-label") ||
+          element.title ||
+          element.innerText ||
+          [...(input.labels ?? [])].map((label) => label.innerText).join(" ") ||
+          (element.localName === "input" ? input.value : "") ||
+          ""
+        )
+          .trim()
+          .slice(0, 80);
+      };
+      const counter = window as unknown as { __ghostlyTapId?: number };
+      return [...document.querySelectorAll<HTMLElement>(selector)]
+        .filter((element) => {
+          // Links are pages of their own; skipped on purpose, or disabled.
+          if (element.matches("a[href]")) return false;
+          if (element.closest("[data-ghostly-skip]")) return false;
+          if (
+            (element as HTMLButtonElement).disabled ||
+            element.closest("[aria-disabled=true], fieldset:disabled, [inert]")
+          ) {
+            return false;
+          }
+          const rect = element.getBoundingClientRect();
+          if (rect.width === 0 || rect.height === 0) return false;
+          if (
+            !element.checkVisibility({
+              opacityProperty: true,
+              visibilityProperty: true,
+            })
+          ) {
+            return false;
+          }
+          const label = labelOf(element);
+          return !pattern.test(label);
+        })
+        .map((element) => {
+          element.dataset.ghostlyTap ??= String(
+            (counter.__ghostlyTapId = (counter.__ghostlyTapId ?? 0) + 1),
+          );
+          const className =
+            typeof element.className === "string" ? element.className : "";
+          return {
+            id: element.dataset.ghostlyTap,
+            key: [
+              element.localName,
+              element.getAttribute("role") ?? "",
+              labelOf(element),
+              className.slice(0, 200),
+            ].join("|"),
+          };
+        });
+    }, LOGOUT.source),
+  );
 }

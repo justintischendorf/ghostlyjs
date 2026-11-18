@@ -78,7 +78,8 @@ test("ghostly measure measures every page at every breakpoint", async ({
     expect(code, output).toBe(0);
 
     const data = JSON.parse(readFileSync(file, "utf8"));
-    expect(Object.keys(data)).toEqual(playgroundGhosts);
+    // With the output: a page that failed is only a warning there.
+    expect(Object.keys(data), output).toEqual(playgroundGhosts);
     for (const name of TAPPED) expect(data, name).toHaveProperty(name);
     // Every breakpoint, plus widths inside one where the layout changes
     // ("base@390").
