@@ -3,10 +3,14 @@ import { defineConfig, devices } from "@playwright/test";
 const isCI = !!process.env.CI;
 
 // Both playgrounds run in dev mode, because <Ghost> only measures there.
+// `PLAYGROUND=vite` runs only one (CI runs each in its own job).
 const playgrounds = [
   { name: "vite", port: 5173, cwd: "../playground-vite" },
   { name: "next", port: 3000, cwd: "../playground-next" },
-];
+].filter(
+  (playground) =>
+    !process.env.PLAYGROUND || playground.name === process.env.PLAYGROUND,
+);
 
 export default defineConfig({
   testDir: "tests",
