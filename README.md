@@ -12,11 +12,13 @@
 
 </div>
 
-Wrap a component in `<Ghost>`, open your app in dev mode, and GhostlyJs
-measures what is really on the screen: every text line, image, icon, button
-and card, at every breakpoint. While your data loads, it draws a skeleton
-with exactly that shape. When the design changes, measure again instead of
-rewriting skeletons by hand.
+Wrap a component in `<Ghost>`, run `ghostly measure` against your app in
+dev mode, and GhostlyJs measures what is really on the screen: every text
+line, image, icon, button and card, at every window width. It opens every
+page and taps every button, menu and tab, so it also finds what only shows
+after a tap. While your data loads, it draws a skeleton with exactly that
+shape. When the design changes, measure again instead of rewriting
+skeletons by hand.
 
 ```tsx
 <Ghost name="profile" isLoading={isLoading}>
@@ -35,8 +37,7 @@ rewriting skeletons by hand.
 | `ghostly measure` | An installed Chrome or Edge, or a browser download (see [below](#no-chrome-or-edge-found)) |
 
 > [!NOTE]
-> Next.js, Vite and any other React setup work. The commands only
-> talk to apps running on `localhost`.
+> Next.js, Vite and any other React setup work.
 
 <img src="https://raw.githubusercontent.com/justintischendorf/ghostlyjs/main/assets/divider.svg" width="100%" alt="" />
 
@@ -95,6 +96,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 }
 ```
 
+**Next.js (Pages Router)**: the same around `<Component>` in
+`pages/_app.tsx`.
+
 **Vite and other setups**: around your app, e.g. in `src/main.tsx`.
 
 ```tsx
@@ -145,46 +149,35 @@ export function Profile() {
 
 ### 4. Measure
 
-Start your app in **dev mode** (e.g. `npm run dev`), then run a command
-from the folder with your `package.json`. Both write `ghostly.json`.
-
-**`ghostly measure <url>`** opens every page in a headless browser at every
-breakpoint (at its smallest width), follows your app's links and waits
-until each `<Ghost>` shows its content.
+Start your app in **dev mode** (e.g. `npm run dev`), then run this from the
+folder with your `package.json`. It writes `ghostly.json`.
 
 ```bash
 npx ghostly measure http://localhost:3000
 ```
 
-| Option                | Default | What it does                                                                                |
-| --------------------- | ------- | ------------------------------------------------------------------------------------------- |
-| `--pages /a,/b`       |         | Also measures pages no link points to.                                                      |
-| `--prune`             | off     | Removes ghosts no page showed, e.g. renamed or deleted ones.                                |
-| `--max-pages <n>`     | `50`    | Follows links to at most `n` pages.                                                         |
-| `--wait <ms>`         | `3000`  | How long a page may stay quiet before a `<Ghost>` that still loads counts as never loading. |
-| `--cookie name=value` |         | Sends a cookie with every page, e.g. your login session. Repeat it for more cookies.        |
+It opens every page of your app in a headless browser, one window per
+breakpoint, and in each window:
+
+Each run builds `ghostly.json` anew: ghosts no page showed anymore
+(renamed, deleted) are gone, and nothing old is mixed in. It only reaches
+pages a link points to, so link every page.
 
 For pages behind a login, copy your session cookie from the browser's dev
-tools (Application → Cookies) and pass it with `--cookie`:
+tools (Application → Cookies) and pass it with `--cookie`.
 
 ```bash
-npx ghostly measure http://localhost:3000/dashboard --cookie "session=..."
-```
-
-**`ghostly dev`** saves measurements while you use the app, for content
-`ghostly measure` can't reach, like behind a click. It measures
-at your window width; resize the window for other breakpoints.
-
-```bash
-npx ghostly dev
+npx ghostly measure http://localhost:3000 --cookie "session=..."
 ```
 
 > [!IMPORTANT]
-> Only `--prune` removes measurements. Run
-> `ghostly measure --prune` first, then add the rest with `ghostly dev`.
+> Tapping can't change your data: while it taps, every request that would
+> write (`POST`, `PUT`, `PATCH`, `DELETE`) is blocked, so "Delete account"
+> deletes nothing. Buttons and links that log out (`Log out`, `Sign out`,
+> `/logout`) are never tapped or opened.
 
 Reload the page: while `isLoading` is `true`, each `<Ghost>` shows its
-skeleton. `npx ghostly --help` lists all commands and options.
+skeleton.
 
 <img src="https://raw.githubusercontent.com/justintischendorf/ghostlyjs/main/assets/divider.svg" width="100%" alt="" />
 
@@ -270,7 +263,7 @@ async function Profile() {
 
 ### Breakpoints
 
-Layouts change with the window width, so a `<Ghost>` is measured once per
+Layouts change with the window width, so a `<Ghost>` is measured for every
 breakpoint.
 
 The default breakpoints are Tailwind's:
@@ -297,18 +290,13 @@ to you; below the smallest one is always `base`.
 > A breakpoint that was never measured uses the next smaller measured one.
 > After changing the breakpoints, measure again.
 
-> [!TIP]
-> `ghostly measure` doesn't click. Content that only shows after a click (a
-> tab, a dialog, a "load more" button) isn't measured by it. Either measure
-> it by hand with [`ghostly dev`](#4-measure), or show it right away while
-> measuring.
-
-### Types
-
-```ts
-import type { GhostProps, GhostlyProviderProps } from "ghostlyjs";
-import type { Breakpoints, GhostlyData } from "ghostlyjs/core";
-```
+Inside a breakpoint, `ghostly measure` sees how the content follows the
+window: a column that grows, a button pushed to the right edge, a chart
+that keeps its aspect ratio. The skeleton follows it the same way (with
+`calc()` and container units), so it matches at every width, not only at
+the breakpoint. Where the layout changes inside a breakpoint, like buttons
+that wrap, `ghostly.json` gets another entry from that width on, e.g.
+`"base@390"`.
 
 <img src="https://raw.githubusercontent.com/justintischendorf/ghostlyjs/main/assets/divider.svg" width="100%" alt="" />
 
@@ -338,23 +326,16 @@ in your own CSS:
 
 ## 🩺 Troubleshooting
 
-#### A `<Ghost>` shows a single grey bar
+#### "`ghostly dev` was removed"
 
-It was never measured. Run `ghostly measure`, or open the page with
-`ghostly dev` running. If `ghostly measure` reports that it never showed
-its content, it loads too slowly (raise `--wait`) or only after a click
-(use [`isMeasuring()`](#content-behind-a-click-with-ismeasuring) or
-`ghostly dev`).
+Since 0.3.0, `ghostly measure` taps every button itself and reaches what
+`ghostly dev` was needed for. Run `ghostly measure` once to measure
+everything the new way.
 
 #### "This is a production build"
 
 `<Ghost>` only measures in dev mode. Point `ghostly measure` at your dev
 server (`npm run dev`), not at `npm run build && npm start`.
-
-#### "Port 6767 is in use"
-
-Another `ghostly dev` is already running, e.g. in another terminal. Stop it
-or use that one.
 
 #### "No Chrome or Edge found"
 
@@ -365,10 +346,10 @@ a browser for it once (about 200 MB):
 npx playwright-core install chromium-headless-shell
 ```
 
-#### "ghostly.json is broken"
+#### `ghostly.json` has a merge conflict
 
-Usually a merge conflict. Fix the file, or delete it, create an empty one
-(`{}`) and measure again.
+Your app can't import it then. Run `ghostly measure` again: it replaces
+the file.
 
 #### The skeleton doesn't match after a design change
 

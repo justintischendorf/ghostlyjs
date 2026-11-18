@@ -8,6 +8,131 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-18
+
+### Added
+
+- `ghostly measure` taps everything: every button, tab, menu, dialog and
+  accordion, one after the other, also what a tap opens. `<Ghost>`s that
+  only show after a tap are measured, and links in opened menus are
+  followed. While tapping, every request that would write (`POST`, `PUT`,
+  `PATCH`, `DELETE`) is blocked, buttons and links that log out are never
+  tapped, and `data-ghostly-skip` keeps it away from anything else.
+- `ghostly measure` measures each breakpoint across all its widths, exact
+  to the pixel, from 320px (the smallest phones) up to 1920px. Where the
+  layout changes inside a breakpoint (buttons that wrap at 390px, text
+  that takes another line), `ghostly.json` gets another entry from that
+  width on, e.g. `"base@390"`, and the skeleton switches there too.
+- Skeletons measured by `ghostly measure` follow the window like the
+  content in between: a `flex-1` column, a button pushed to the right edge
+  or a chart with an aspect ratio grow and move exactly like it (stored as
+  `widthCalc`, `xCalc`, `heightCalc`, ... and drawn with `calc()` and
+  container units).
+- The windows of one page run side by side, each with its own browser
+  profile, so what a tap stores (a theme, a collapsed sidebar) doesn't
+  change the other measurements.
+- New playgrounds: test pages that show `ghostly measure` getting every
+  kind of layout and tap right. Each part names the case it tests. An
+  overview with a sidebar, cards on three pages with other content each,
+  filters and a summary that is a sidebar or a sheet, collections as a
+  grid or a list and a detail page per collection, charts, account
+  settings behind a pretend login, a sign-in and an admin page only the
+  footer links to, real async loading and over 40 edge cases. It has tabs,
+  menus, popovers, dialogs (one opens by its URL, `?item=5`), an
+  accordion, buttons that log out or write, and a part marked
+  `data-ghostly-skip`. The Next.js and the Vite playground share the same
+  components and pages.
+- E2E tests first run `ghostly measure` against both playgrounds (with
+  `--cookie`), then check every page and every state a tap reaches
+  against what it measured: on a phone, and in a desktop window resized
+  from 320 to 1920px, at each breakpoint and at widths inside them. Each
+  state loads once, so the whole run takes a few minutes.
+
+### Changed
+
+- `ghostly measure` builds `ghostly.json` anew on every run instead of
+  merging into it: ghosts no page showed anymore (renamed, deleted) are
+  removed, and no old measurement stays next to the new ones. A broken
+  `ghostly.json` (merge conflict markers), which the app can't import, is
+  emptied first, so the app loads again, and then measured anew. Before,
+  it was an error.
+- A `<Ghost>` that shows other data on several pages (the header on the
+  page of each group) keeps the measurement of the first page measured,
+  not of the last. So a new page doesn't change its skeleton.
+
+### Removed
+
+- `ghostly dev` and its collector on port 6767. `ghostly measure` reaches
+  everything it was needed for. `<Ghost>` no longer sends requests in dev
+  mode, so the console hint about a missing `ghostly dev` is gone too.
+  Measure again with `ghostly measure` once.
+- The options `--pages`, `--prune`, `--max-pages`, `--max-taps` and
+  `--wait` of `ghostly measure`. It reaches every page a link points to
+  and every `<Ghost>` behind a tap on its own, and builds `ghostly.json`
+  anew each time, so `--cookie` is the only option left. Link to a page
+  no link pointed to yet, e.g. from the footer. Only apps without an end
+  are stopped: after 1000 pages, and after 500 taps per page and window.
+- `hideClass` from `ghostlyjs/core`. Variants are hidden with
+  `fromClass` / `toClass` now, and `variantsOf` returns `from` and `to`
+  widths instead of range indexes.
+
+### Fixed
+
+- A `<Ghost>` that a tap starts loading is waited for, also when it
+  loads without a request and without changing the page (a timer, a
+  cache, a worker). Before, the tap counted as done right away, and a
+  `<Ghost>` behind the last tab or a button in a dialog was never
+  measured.
+- Buttons that a view switch without a URL change removed (tabs that
+  swap the content, a wizard) are tapped too: the page is loaded again
+  to reach them. Before, everything after the switch was never tapped.
+- Checkboxes and radios without text of their own are told apart by
+  their `<label>`. Before, all of them looked the same, and only the
+  first one was tapped.
+- A tap that navigates while the page is read (a form that posts, which
+  is blocked and shows an error page) no longer fails the whole page with
+  "Execution context was destroyed".
+- The routes of a hash router (`#/orders`, `#!/orders`) are measured as
+  pages. Before, their links counted as a place on the same page, and
+  only the start page was measured, without a warning. `#top` still
+  stays on the page.
+- A tap that only changes the query of the URL, like a dialog that keeps
+  its state in `?item=3`, is measured on the same page. Before,
+  `ghostly measure` measured it as a page of its own and reported the
+  dialog's `<Ghost>` as never shown on the page it opened from.
+- Links to a place on the same page (`#top`) are no longer measured as
+  pages. After a tap that added a query, they counted as a page of their
+  own.
+- "Not measured everywhere" no longer counts a `<Ghost>` another page
+  measured, like one in a menu that a dialog covers on one page.
+- A `<Ghost>` that is hidden at a width (a sidebar below `lg`) and shows
+  under the same name elsewhere after a tap (the same summary in a sheet)
+  is measured where it shows. Before, the hidden one was measured with no
+  size, and its skeleton was missing in the sheet.
+- Text that fills its line at one width and keeps its width after that
+  (a plain sentence that just fits) no longer stretches its skeleton to the
+  full width of a wider parent.
+- Skeletons of content that fills its parent (cards, tables, headings in a
+  block) fill it too, also when it is wider than when measured. Before,
+  they kept the measured width, so on a phone wider than the measured
+  375px they were shorter than the content. `ghostly.json` stores this as
+  `fill`; measure again to get it.
+- Skeletons of other content have the measured width as a real width
+  instead of `width: 100%`. A parent sized by its content (`w-auto`,
+  `inline-flex`, a toolbar) now makes room for the skeleton like for the
+  content. Before, it counted as 0px there, so the toolbar got narrower,
+  wrapped and moved the page below it.
+- Text pieces of one line in different sizes keep their own bars. Before,
+  a piece left of a bigger one that sits a bit higher (a name next to a
+  score in a table row) was joined into it and vanished from the skeleton.
+- Elements hidden for screen readers only (`sr-only`, `clip-path:
+  inset(50%)` or `clip: rect(0 0 0 0)`) are no longer drawn, like a hidden
+  file input over an avatar.
+- Cards and other large boxes stretch with the skeleton like text lines.
+  Before, a box that wasn't clearly wider than high kept its measured
+  width, so in a wider skeleton the content of a card stuck out of it.
+  Only circles and small boxes (icons, up to 64px) keep their size now.
+
 ## [0.2.0] - 2026-11-16
 
 ### Added
@@ -145,7 +270,8 @@ and this project adheres to
 - Placeholder package `ghostlyjs` on npm to reserve the name. Not usable yet.
   ([#1], [#2])
 
-[Unreleased]: https://github.com/justintischendorf/ghostlyjs/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/justintischendorf/ghostlyjs/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/justintischendorf/ghostlyjs/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/justintischendorf/ghostlyjs/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/justintischendorf/ghostlyjs/compare/v0.0.1...v0.1.0
 [0.0.1]: https://github.com/justintischendorf/ghostlyjs/releases/tag/v0.0.1

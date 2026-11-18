@@ -4,11 +4,16 @@
 import { describe, expect, test } from "vitest";
 
 import {
+  boundariesOf,
   breakpointCss,
   breakpointOf,
   DEFAULT_BREAKPOINTS,
-  hideClass,
+  fromClass,
+  keyAt,
+  minWidthOf,
   rangesOf,
+  toClass,
+  variantClasses,
   variantsOf,
 } from "./breakpoints";
 import type { GhostBoxMeasurement } from "./types";
@@ -62,12 +67,28 @@ describe("breakpointOf", () => {
   });
 });
 
+describe("minWidthOf", () => {
+  test.each([
+    ["base", 0],
+    ["md", 768],
+    ["base@390", 390],
+    ["md@800", 800],
+    // Outside of its range, or of a breakpoint that doesn't exist.
+    ["base@700", undefined],
+    ["md@768", undefined],
+    ["old", undefined],
+    ["base@abc", undefined],
+  ])("%s → %s", (key, width) => {
+    expect(minWidthOf(key, DEFAULT_BREAKPOINTS)).toBe(width);
+  });
+});
+
 describe("variantsOf", () => {
-  // Ranges: 0 base, 1 sm, 2 md, 3 lg, 4 xl, 5 2xl.
   const variants = (entry: Record<string, GhostBoxMeasurement>) =>
-    variantsOf(entry, DEFAULT_BREAKPOINTS).map((variant) => ({
-      height: variant.measurement.height,
-      ranges: variant.ranges,
+    variantsOf(entry, DEFAULT_BREAKPOINTS).map(({ measurement, from, to }) => ({
+      height: measurement.height,
+      from,
+      to,
     }));
 
   test("nothing measured: no variant", () => {
@@ -77,54 +98,93 @@ describe("variantsOf", () => {
 
   test("one measurement shows everywhere", () => {
     expect(variants({ md: high(10) })).toEqual([
-      { height: 10, ranges: [0, 1, 2, 3, 4, 5] },
+      { height: 10, from: 0, to: undefined },
     ]);
   });
 
-  test("a range without its own uses the next smaller one", () => {
+  test("each one up to the next measured one", () => {
     expect(variants({ base: high(10), lg: high(20) })).toEqual([
-      { height: 10, ranges: [0, 1, 2] },
-      { height: 20, ranges: [3, 4, 5] },
+      { height: 10, from: 0, to: 1024 },
+      { height: 20, from: 1024, to: undefined },
     ]);
   });
 
-  test("below the smallest measured range, the next larger one", () => {
+  test("below the smallest measured one, the smallest", () => {
     expect(variants({ md: high(10), xl: high(20) })).toEqual([
-      { height: 10, ranges: [0, 1, 2, 3] },
-      { height: 20, ranges: [4, 5] },
+      { height: 10, from: 0, to: 1280 },
+      { height: 20, from: 1280, to: undefined },
     ]);
   });
 
-  test("equal measurements share one variant", () => {
-    expect(variants({ base: high(10), md: high(20), xl: high(10) })).toEqual([
-      { height: 10, ranges: [0, 1, 4, 5] },
-      { height: 20, ranges: [2, 3] },
+  test("widths inside a range get their own variant", () => {
+    expect(
+      variants({ base: high(10), "base@390": high(20), sm: high(30) }),
+    ).toEqual([
+      { height: 10, from: 0, to: 390 },
+      { height: 20, from: 390, to: 640 },
+      { height: 30, from: 640, to: undefined },
+    ]);
+  });
+
+  test("equal neighbours share one variant", () => {
+    expect(variants({ base: high(10), md: high(10), xl: high(20) })).toEqual([
+      { height: 10, from: 0, to: 1280 },
+      { height: 20, from: 1280, to: undefined },
     ]);
   });
 
   test("measurements of unknown breakpoints are ignored", () => {
     expect(variants({ old: high(5), lg: high(20) })).toEqual([
-      { height: 20, ranges: [0, 1, 2, 3, 4, 5] },
+      { height: 20, from: 0, to: undefined },
     ]);
   });
 });
 
-describe("breakpointCss", () => {
-  const css = breakpointCss({ sm: 640, md: 768 });
+describe("keyAt", () => {
+  const entry = { base: high(10), "base@390": high(20), md: high(30) };
 
-  test("hides each class in its range only", () => {
-    expect(css).toContain(
-      `@media (max-width: 639.98px) { .${hideClass(0)} { display: none !important; } }`,
-    );
-    expect(css).toContain(
-      `@media (min-width: 640px) and (max-width: 767.98px) { .${hideClass(1)}`,
-    );
-    expect(css).toContain(`@media (min-width: 768px) { .${hideClass(2)}`);
+  test.each([
+    [320, "base"],
+    [389, "base"],
+    [390, "base@390"],
+    [639, "base@390"],
+    // Not measured there: the breakpoint itself.
+    [700, "sm"],
+    [900, "md"],
+  ])("%spx → %s", (width, key) => {
+    expect(keyAt(width, entry, DEFAULT_BREAKPOINTS)).toBe(key);
+  });
+});
+
+describe("CSS", () => {
+  test("every breakpoint and every width inside one is a boundary", () => {
+    expect(
+      boundariesOf(
+        { a: { base: high(1), "base@390": high(2) }, b: { "md@800": high(3) } },
+        { sm: 640, md: 768 },
+      ),
+    ).toEqual([390, 640, 768, 800]);
   });
 
-  test("without breakpoints, base covers every width", () => {
-    expect(breakpointCss({})).toBe(
-      `.${hideClass(0)} { display: none !important; }`,
+  test("a variant is hidden below its start and from its end on", () => {
+    const css = breakpointCss([390]);
+    expect(css).toContain(
+      `@media (max-width: 389.98px) { .${fromClass(390)} { display: none !important; } }`,
     );
+    expect(css).toContain(
+      `@media (min-width: 390px) { .${toClass(390)} { display: none !important; } }`,
+    );
+  });
+
+  test("the classes of a variant", () => {
+    const measurement = high(1);
+    expect(variantClasses({ measurement, from: 0, to: 390 })).toBe(
+      toClass(390),
+    );
+    expect(variantClasses({ measurement, from: 390, to: 640 })).toBe(
+      `${fromClass(390)} ${toClass(640)}`,
+    );
+    expect(variantClasses({ measurement, from: 640 })).toBe(fromClass(640));
+    expect(variantClasses({ measurement, from: 0 })).toBe("");
   });
 });

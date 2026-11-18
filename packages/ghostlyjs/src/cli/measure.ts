@@ -1,47 +1,74 @@
 // `ghostly measure <url>`: opens every page of the running app in a headless
-// browser, once per breakpoint, and stores what each <Ghost> measures in
-// `ghostly.json`. <Ghost> measures itself as in `ghostly dev`; this command
-// only catches the measurements it sends to the collector's port, so
-// `ghostly dev` doesn't need to run.
+// browser and stores what each <Ghost> measures in `ghostly.json`.
+//
+// Per page, one window per breakpoint range, side by side. Each window
+//   1. waits until the page loaded and its <Ghost>s show their content,
+//   2. measures them across its range, exact to the pixel, so a layout
+//      that changes inside the range (buttons that wrap at 390px) gets its
+//      own measurement (see fit.ts and `sweep`),
+//   3. taps everything that can be tapped (buttons, tabs, menus, dialogs,
+//      accordions), one after the other, and measures each <Ghost> that
+//      only shows up then, the same way. Links it finds, also in opened
+//      menus, are measured as pages of their own.
+// While tapping, the app can only read: every request that would change
+// something (POST, PUT, PATCH, DELETE) is blocked, so "Delete account"
+// deletes nothing.
 
 import { parseArgs } from "node:util";
 
 import { intro, log, outro } from "@clack/prompts";
-import type { Browser, BrowserContext, BrowserType } from "playwright-core";
+import type {
+  Browser,
+  BrowserContext,
+  BrowserType,
+  Page,
+  Request,
+} from "playwright-core";
 
 import { DEFAULT_BREAKPOINTS, rangesOf } from "../core/breakpoints";
-import { DEFAULT_PORT, MEASURE_FLAG } from "../core/index";
-import type { Breakpoints, GhostlyData } from "../core/types";
-import { CliError } from "./cli-error";
 import {
-  ghostlyFile,
-  isMeasurementMessage,
-  readGhostlyFile,
-  sortByKey,
-  writeGhostlyFile,
-} from "./ghostly-file";
+  MEASURE_ALL,
+  MEASURE_FLAG,
+  type GhostMeasureResult,
+} from "../core/index";
+import type { Breakpoints, GhostlyData, GhostlyEntry } from "../core/types";
+import { CliError } from "./cli-error";
+import { fits, measurementOf, type Sample, type Segment } from "./fit";
+import { ghostlyFile, readGhostlyFile, writeGhostlyFile } from "./ghostly-file";
 import { bar, header, progressLine, style } from "./style";
 
 export type MeasureCommandOptions = {
   url: string;
-  pages: string[];
-  prune: boolean;
-  maxPages: number;
   // Cookies every page gets, e.g. a login session, so pages behind a
   // login can be measured too.
   cookies: { name: string; value: string }[];
-  // Quiet time (ms) after which the <Ghost>s still loading count as never
-  // loading.
-  wait: number;
 };
 
-// The window width of phones, for the range below the smallest breakpoint.
-const PHONE_WIDTH = 375;
+// The smallest phones; below it, the skeletons of this width are used.
+const PHONE_WIDTH = 320;
+// The widest window measured; wider ones use the measurement of this width,
+// which keeps growing with the window like the content.
+const MAX_WIDTH = 1920;
 const WINDOW_HEIGHT = 900;
-// Longest time on one page, even if it keeps loading (e.g. polling).
+// Longest time for a page to load, even if it keeps loading (polling).
 const PAGE_TIMEOUT = 30_000;
+// Longest time for tapping on one page in one window.
+const TAP_TIMEOUT = 120_000;
+// Quiet time (ms) after which the <Ghost>s still loading count as never
+// loading.
+const QUIET_TIME = 3000;
+// Safety nets for apps without an end, not limits to tune: pages followed
+// at most (a calendar whose "next month" link always leads to another
+// page), and taps per page and window (a "next" button that always shows
+// another one).
+const MAX_PAGES = 1000;
+const MAX_TAPS = 500;
 // Width of the page column in the report.
 const PATH_COLUMN = 14;
+// Requests that only read. All others are blocked while tapping.
+const READING = new Set(["GET", "HEAD", "OPTIONS"]);
+// Never tapped or followed: it would end the login session.
+const LOGOUT = /log[\s_-]*out|sign[\s_-]*out|abmelden|ausloggen/i;
 
 export function parseOptions(args: string[]): MeasureCommandOptions {
   let parsed;
@@ -50,10 +77,6 @@ export function parseOptions(args: string[]): MeasureCommandOptions {
       args,
       allowPositionals: true,
       options: {
-        pages: { type: "string" },
-        prune: { type: "boolean", default: false },
-        "max-pages": { type: "string", default: "50" },
-        wait: { type: "string", default: "3000" },
         cookie: { type: "string", multiple: true, default: [] },
       },
     });
@@ -76,14 +99,6 @@ export function parseOptions(args: string[]): MeasureCommandOptions {
   if (!URL.canParse(url) || !/^https?:$/.test(new URL(url).protocol)) {
     throw new CliError(`"${url}" is not a URL like http://localhost:3000.`);
   }
-  const maxPages = Number(values["max-pages"]);
-  const wait = Number(values.wait);
-  if (!Number.isInteger(maxPages) || maxPages < 1) {
-    throw new CliError("--max-pages needs a whole number of at least 1.");
-  }
-  if (!Number.isFinite(wait) || wait < 0) {
-    throw new CliError("--wait needs a number of milliseconds.");
-  }
   // "name=value"; the value may contain "=" itself.
   const cookies = values.cookie.map((cookie) => {
     const split = cookie.indexOf("=");
@@ -93,59 +108,41 @@ export function parseOptions(args: string[]): MeasureCommandOptions {
     }
     return { name, value: cookie.slice(split + 1) };
   });
-  return {
-    url,
-    pages: (values.pages ?? "")
-      .split(",")
-      .map((page) => page.trim())
-      .filter(Boolean),
-    prune: values.prune,
-    maxPages,
-    cookies,
-    wait,
-  };
+  return { url, cookies };
 }
 
-// The window width each range is measured at: its smallest width, where
-// text wraps the most. Below the smallest breakpoint, a phone.
-export function widthsOf(
-  breakpoints: Breakpoints,
-): { name: string; width: number }[] {
+// A breakpoint range as measured: every window width from `start` to
+// `end`. Below the smallest breakpoint, from the smallest phones on.
+export type MeasuredRange = { name: string; start: number; end: number };
+
+export function measuredRangesOf(breakpoints: Breakpoints): MeasuredRange[] {
   const ranges = rangesOf(breakpoints);
-  return ranges.map((range, index) => ({
-    name: range.name,
-    width:
-      index === 0
-        ? Math.max(1, Math.min(PHONE_WIDTH, (ranges[1]?.min ?? Infinity) - 1))
-        : range.min,
-  }));
+  return ranges.map((range, index) => {
+    const next = ranges[index + 1]?.min;
+    const end = next === undefined ? Math.max(MAX_WIDTH, range.min) : next - 1;
+    const start =
+      index === 0 ? Math.max(1, Math.min(PHONE_WIDTH, end)) : range.min;
+    return { name: range.name, start, end };
+  });
 }
 
-// Path and query of a link to the app, or undefined for other sites. The
-// hash is dropped: it's the same page.
+// Path and query of a link to the app, or undefined for other sites and
+// for logout links. The hash is dropped: it's the same page. Only the
+// route of a hash router (`#/orders`, `#!/orders`) is a page of its own.
 export function pageOf(href: string, origin: string): string | undefined {
   if (!URL.canParse(href, origin)) return undefined;
   const url = new URL(href, origin);
   if (url.origin !== origin) return undefined;
-  return url.pathname + url.search;
+  const route = routeOf(url);
+  if (LOGOUT.test(url.pathname + route)) return undefined;
+  return url.pathname + url.search + route;
 }
 
-// The new measurements win; the other breakpoints of a <Ghost> stay. With
-// `prune`, ghosts no page showed are removed.
-export function mergeMeasurements(
-  data: GhostlyData,
-  measured: GhostlyData,
-  { prune, seen }: { prune: boolean; seen: Set<string> },
-): GhostlyData {
-  const result: GhostlyData = {};
-  for (const [name, entry] of Object.entries(data)) {
-    if (!prune || seen.has(name)) result[name] = entry;
-  }
-  for (const [name, entry] of Object.entries(measured)) {
-    result[name] = sortByKey({ ...result[name], ...entry });
-  }
-  return sortByKey(result);
-}
+// The route of a hash router in the URL, or "". Its start (`#/`) is the
+// page itself.
+const routeOf = (url: URL) => (/^#!?\/./.test(url.hash) ? url.hash : "");
+
+const breakpointPart = (key: string) => key.split("@")[0] ?? key;
 
 // "1 ghost", "2 ghosts".
 const plural = (count: number, word: string) =>
@@ -153,13 +150,21 @@ const plural = (count: number, word: string) =>
 
 export async function runMeasure(args: string[]): Promise<void> {
   console.log(header("ghostly measure"));
-  intro("Measuring every page at every breakpoint");
+  intro("Measuring every page at every width");
   const options = parseOptions(args);
   const origin = new URL(options.url).origin;
-  // A broken ghostly.json fails now, not after measuring every page. It is
-  // read again at the end: `ghostly dev` may write to it meanwhile.
-  readGhostlyFile(ghostlyFile());
-
+  // Measured anew anyway, but the app imports the file: broken, it can't
+  // show a single <Ghost>. Emptied first, so the dev server picks it up
+  // before the first page loads. A file that is fine stays until the end,
+  // so stopping halfway loses nothing.
+  const file = ghostlyFile();
+  const before = readGhostlyFile(file);
+  if (before === "broken") {
+    writeGhostlyFile(file, {});
+    log.warn(
+      "ghostly.json was broken (e.g. a merge conflict) and is measured anew.",
+    );
+  }
   try {
     await fetch(options.url);
   } catch {
@@ -178,26 +183,14 @@ export async function runMeasure(args: string[]): Promise<void> {
     process.exit(130);
   });
   progress.show("Starting the browser");
-  // Loaded only here, so `ghostly dev` starts without it.
+  // Loaded only here, so `ghostly --help` starts without it.
   const { chromium } = await import("playwright-core");
   const browser = await launchBrowser(chromium).catch((error: unknown) => {
     progress.hide();
     throw error;
   });
   try {
-    const context = await browser.newContext();
-    if (options.cookies.length > 0) {
-      await context.addCookies(
-        options.cookies.map((cookie) => ({ ...cookie, url: origin })),
-      );
-    }
-    // Lets the app know (`isMeasuring()`) before any of its code runs.
-    await context.addInitScript(`window.${MEASURE_FLAG} = true;`);
-    // No measurement may reach a running `ghostly dev`, not even from a page
-    // that isn't measured (reading the breakpoints). The pages that are
-    // measured catch them with their own route, which wins over this one.
-    await context.route(isCollector, (route) => route.fulfill({ status: 204 }));
-    await measureApp(context, origin, options, progress);
+    await measureApp(browser, origin, options, progress);
   } finally {
     // An error ends the output; the spinner must not stay above it.
     progress.hide();
@@ -222,8 +215,39 @@ async function launchBrowser(chromium: BrowserType): Promise<Browser> {
   );
 }
 
+// A fresh browser profile for each window: what tapping stores (a theme in
+// localStorage, a collapsed sidebar) doesn't change the other windows or
+// pages. With the cookies of the command line.
+async function newContext(
+  browser: Browser,
+  origin: string,
+  options: MeasureCommandOptions,
+): Promise<BrowserContext> {
+  const context = await browser.newContext();
+  if (options.cookies.length > 0) {
+    await context.addCookies(
+      options.cookies.map((cookie) => ({ ...cookie, url: origin })),
+    );
+  }
+  // Lets the app know (`isMeasuring()`) before any of its code runs, and
+  // remembers when the page last changed, to know when it is done.
+  await context.addInitScript(`
+    window.${MEASURE_FLAG} = true;
+    window.__ghostlyChanged = performance.now();
+    new MutationObserver(() => {
+      window.__ghostlyChanged = performance.now();
+    }).observe(document, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      characterData: true,
+    });
+  `);
+  return context;
+}
+
 async function measureApp(
-  context: BrowserContext,
+  browser: Browser,
   origin: string,
   options: MeasureCommandOptions,
   progress: ReturnType<typeof progressLine>,
@@ -231,7 +255,7 @@ async function measureApp(
   const start = pageOf(options.url, origin) ?? "/";
   progress.show("Reading the breakpoints");
   const { breakpoints, production } = await readBreakpoints(
-    context,
+    await newContext(browser, origin, options),
     origin + start,
   );
   // Known right away from <GhostlyProvider>; no need to visit every page.
@@ -241,61 +265,88 @@ async function measureApp(
         "Start your dev server (e.g. `npm run dev`) and measure that.",
     );
   }
-  const widths = widthsOf(breakpoints);
+  const ranges = measuredRangesOf(breakpoints);
   progress.hide();
 
   log.info(
     `${style("cyan", origin)}\n` +
       style(
         "dim",
-        widths.map(({ name, width }) => `${name} ${width}`).join(" · "),
+        ranges
+          .map(({ name, start, end }) => `${name} ${start}–${end}`)
+          .join(" · "),
       ),
   );
 
   const queue = [start];
-  for (const page of options.pages) {
-    const path = pageOf(page, origin);
-    if (path && !queue.includes(path)) queue.push(path);
-  }
   let skippedPages = 0;
   const measured: GhostlyData = {};
   // Every <Ghost> that showed up, measured or not.
   const seen = new Set<string>();
-  const incomplete = new Set<string>();
+  // Breakpoints each <Ghost> was measured at, on any page so far: one
+  // that a page doesn't reach (a menu behind a dialog) may be measured on
+  // another one.
+  const measuredAt = new Map<string, Set<string>>();
+  const fullyMeasured = (name: string) =>
+    ranges.every((range) => measuredAt.get(name)?.has(range.name));
 
   for (const [index, path] of queue.entries()) {
-    const ghosts = new Set<string>();
-    // Breakpoints each <Ghost> of this page was measured at.
-    const measuredAt = new Map<string, Set<string>>();
-    let error: string | undefined;
-
-    for (const [step, { name: breakpoint, width }] of widths.entries()) {
-      // E.g. "/feed  ▰▰▰▱▱▱ md  page 2 of 7". The number of pages grows
-      // while links are found.
+    // One window per range, side by side; the progress shows how many are
+    // done, e.g. "/feed  ▰▰▰▱▱▱  page 2 of 7". The number of pages grows
+    // while links are found.
+    let done = 0;
+    const showProgress = () =>
       progress.show(
-        `${path}  ${bar(step + 1, widths.length)} ${breakpoint}  ` +
+        `${path}  ${bar(done, ranges.length)}  ` +
           style("dim", `page ${index + 1} of ${queue.length}`),
       );
-      const visit = await visitPage(context, origin + path, width, options);
-      if (visit.error) {
-        error = visit.error;
-        break;
-      }
+    showProgress();
+    const visits = await Promise.all(
+      ranges.map(async (range) => {
+        const context = await newContext(browser, origin, options);
+        try {
+          return await visitPage(context, origin + path, range);
+        } finally {
+          await context.close();
+          done++;
+          showProgress();
+        }
+      }),
+    );
+
+    const ghosts = new Set<string>();
+    let taps = 0;
+    const error = visits.find((visit) => visit.error)?.error;
+    for (const [step, visit] of visits.entries()) {
+      const range = ranges[step];
+      if (!range) continue;
+      taps = Math.max(taps, visit.taps);
       for (const name of visit.ghosts) ghosts.add(name);
-      for (const [name, { breakpoint, measurement }] of visit.measured) {
-        ghosts.add(name);
-        measured[name] = { ...measured[name], [breakpoint]: measurement };
+      for (const [name, entry] of visit.measured) {
+        // The first page that measured a breakpoint keeps it: a <Ghost> on
+        // pages with other data (the header of /groups/1, /groups/2, ...)
+        // keeps the measurement of the first one, also when pages are
+        // added. All keys of a breakpoint ("base", "base@390") from one
+        // page, they belong together.
+        const kept = measured[name] ?? {};
+        const done = new Set(Object.keys(kept).map(breakpointPart));
+        measured[name] = {
+          ...kept,
+          ...Object.fromEntries(
+            Object.entries(entry).filter(
+              ([key]) => !done.has(breakpointPart(key)),
+            ),
+          ),
+        };
         const at = measuredAt.get(name) ?? new Set();
-        measuredAt.set(name, at.add(breakpoint));
+        measuredAt.set(name, at.add(range.name));
       }
       for (const link of visit.links) {
         const linked = pageOf(link, origin);
         if (!linked || queue.includes(linked)) continue;
-        if (queue.length < options.maxPages) queue.push(linked);
+        if (queue.length < MAX_PAGES) queue.push(linked);
         else skippedPages++;
       }
-      // A page without <Ghost>s needs no other widths.
-      if (ghosts.size === 0) break;
     }
 
     progress.hide();
@@ -306,15 +357,15 @@ async function measureApp(
       continue;
     }
     for (const name of ghosts) seen.add(name);
-    // Problems of this page, one line per <Ghost>.
+    // Problems of this page, one line per <Ghost> not measured everywhere
+    // yet, on this page or before.
     const problems: string[] = [];
     for (const name of [...ghosts].sort()) {
+      if (fullyMeasured(name)) continue;
       const at = measuredAt.get(name);
-      const missing = widths
-        .map(({ name: breakpoint }) => breakpoint)
+      const missing = ranges
+        .map((range) => range.name)
         .filter((breakpoint) => !at?.has(breakpoint));
-      if (missing.length === 0) continue;
-      incomplete.add(name);
       problems.push(
         at
           ? `"${name}" not measured at ${missing.join(", ")}`
@@ -322,57 +373,62 @@ async function measureApp(
       );
     }
     const count = plural(ghosts.size, "ghost");
+    const tapped = taps > 0 ? style("dim", ` · ${plural(taps, "tap")}`) : "";
     if (problems.length === 0) {
-      log.success(`${column}${count}`);
+      log.success(`${column}${count}${tapped}`);
     } else {
-      const done = ghosts.size - problems.length;
+      const shown = ghosts.size - problems.length;
       log.warn(
-        `${column}${done} of ${count}\n` +
+        `${column}${shown} of ${count}${tapped}\n` +
           problems.map((problem) => style("dim", problem)).join("\n"),
       );
     }
   }
 
   if (skippedPages > 0) {
-    log.warn(
-      `Stopped following links after ${options.maxPages} pages ` +
-        style("dim", "(--max-pages)"),
-    );
+    log.warn(`Stopped following links after ${MAX_PAGES} pages`);
   }
   const names = Object.keys(measured);
   if (names.length === 0) {
     throw new CliError(
       seen.size === 0
         ? `No <Ghost> found on ${plural(queue.length, "page")}.`
-        : "No <Ghost> sent a measurement. Is the app running in dev mode? " +
+        : "No <Ghost> could be measured. Is the app running in dev mode? " +
             "Production builds don't measure.",
     );
   }
 
+  // Built anew from what this run measured: ghosts no page showed anymore
+  // (renamed, deleted) are gone, and nothing old is mixed in.
   const file = ghostlyFile();
   const before = readGhostlyFile(file);
-  const data = mergeMeasurements(before, measured, {
-    prune: options.prune,
-    seen,
-  });
-  writeGhostlyFile(file, data);
+  writeGhostlyFile(file, measured);
 
-  const removed = Object.keys(before).filter((name) => !(name in data));
+  const removed =
+    before === "broken"
+      ? []
+      : Object.keys(before).filter((name) => !(name in measured));
   if (removed.length > 0) {
     log.success(
       `Removed ${plural(removed.length, "ghost")} no page showed: ` +
         removed.map((name) => `"${name}"`).join(", "),
     );
   }
-  if (incomplete.size > 0) {
+  // Counted at the end: a later page may have measured what one before
+  // couldn't reach.
+  const incomplete = [...seen].filter((name) => !fullyMeasured(name));
+  if (incomplete.length > 0) {
     log.warn(
-      `${plural(incomplete.size, "ghost")} not measured everywhere.\n` +
-        style("dim", "Open them by hand with `ghostly dev` running."),
+      `${plural(incomplete.length, "ghost")} not measured everywhere.\n` +
+        style(
+          "dim",
+          "Is their content on a page no link points to, or behind more than a tap?",
+        ),
     );
   }
   outro(
     `${plural(names.length, "ghost")} measured at ` +
-      `${plural(widths.length, "breakpoint")} → ${style("cyan", "ghostly.json")}`,
+      `${plural(ranges.length, "breakpoint")} → ${style("cyan", "ghostly.json")}`,
   );
 }
 
@@ -383,8 +439,8 @@ async function readBreakpoints(
   context: BrowserContext,
   url: string,
 ): Promise<{ breakpoints: Breakpoints; production: boolean }> {
-  const page = await context.newPage();
   try {
+    const page = await context.newPage();
     const response = await page.goto(url);
     if (response && response.status() >= 400) {
       throw new CliError(`${url} answered with ${response.status()}.`);
@@ -404,7 +460,7 @@ async function readBreakpoints(
         !!tag && (await tag.getAttribute("data-ghostly-dev")) === null,
     };
   } finally {
-    await page.close();
+    await context.close();
   }
 }
 
@@ -412,105 +468,583 @@ type Visit = {
   error?: string;
   // Names of the <Ghost>s on the page.
   ghosts: Set<string>;
-  measured: Map<
-    string,
-    { breakpoint: string; measurement: GhostlyData[string][string] }
-  >;
-  links: string[];
+  // What each measured <Ghost> stores for this range, e.g. "base" and
+  // "base@390".
+  measured: Map<string, GhostlyEntry>;
+  links: Set<string>;
+  taps: number;
 };
 
-const isCollector = (url: URL) =>
-  url.hostname === "localhost" && url.port === String(DEFAULT_PORT);
+// What the window sees of the page right now.
+type PageState = {
+  // Every <Ghost>, loading or not.
+  ghosts: string[];
+  // The ones that show their content.
+  shown: string[];
+  fontsLoaded: boolean;
+  // Milliseconds since the page last changed.
+  sinceChange: number;
+};
 
-// Opens one page at one window width and waits until every <Ghost> on it
-// measured itself, or until nothing happens on the page for a while.
+// Opens one page in one window, measures its <Ghost>s at every width of
+// the range and taps everything (see the top of this file).
 async function visitPage(
   context: BrowserContext,
   url: string,
-  width: number,
-  options: MeasureCommandOptions,
+  range: MeasuredRange,
 ): Promise<Visit> {
   const page = await context.newPage();
-  await page.setViewportSize({ width, height: WINDOW_HEIGHT });
-  const visit: Visit = { ghosts: new Set(), measured: new Map(), links: [] };
+  await page.setViewportSize({ width: range.start, height: WINDOW_HEIGHT });
+  const visit: Visit = {
+    ghosts: new Set(),
+    measured: new Map(),
+    links: new Set(),
+    taps: 0,
+  };
   let lastActivity = Date.now();
   // Requests of the app still loading; while one runs, the page isn't quiet.
-  const loading = new Set<unknown>();
+  const loading = new Set<Request>();
+  const activity = () => (lastActivity = Date.now());
+  page.on("request", (request) => {
+    loading.add(request);
+    activity();
+  });
+  const finished = (request: Request) => {
+    loading.delete(request);
+    activity();
+  };
+  page.on("requestfinished", finished);
+  page.on("requestfailed", finished);
+  // A tap may open an alert, a new tab or a file picker: closed right away.
+  page.on("dialog", (dialog) => void dialog.dismiss().catch(() => {}));
+  page.on("popup", (popup) => void popup.close().catch(() => {}));
 
-  try {
-    // Answers in place of `ghostly dev`.
-    await page.route(isCollector, async (route) => {
-      const request = route.request();
-      if (request.method() === "PATCH") {
-        try {
-          const message: unknown = JSON.parse(request.postData() ?? "");
-          if (isMeasurementMessage(message)) {
-            visit.measured.set(message.name, message);
-            lastActivity = Date.now();
-          }
-        } catch {
-          // Not a measurement.
-        }
-      }
-      // Playwright answers the CORS preflight of a caught request itself.
-      await route.fulfill({ status: 204 });
-    });
-    page.on("request", (request) => {
-      if (isCollector(new URL(request.url()))) return;
-      loading.add(request);
-      lastActivity = Date.now();
-    });
-    const finished = (request: unknown) => {
-      loading.delete(request);
-      lastActivity = Date.now();
-    };
-    page.on("requestfinished", finished);
-    page.on("requestfailed", finished);
+  const state = (): Promise<PageState> =>
+    readPage(page, () =>
+      page.evaluate(() => {
+        const ghosts = [...document.querySelectorAll("[data-ghost]")];
+        const isSkeleton = (element: Element) =>
+          element.matches(".ghostly-skeleton, .ghostly-placeholder");
+        const changed = (window as unknown as { __ghostlyChanged?: number })
+          .__ghostlyChanged;
+        return {
+          ghosts: ghosts.map((element) => element.getAttribute("data-ghost")!),
+          shown: ghosts
+            .filter((element) => !isSkeleton(element))
+            .map((element) => element.getAttribute("data-ghost")!),
+          fontsLoaded: document.fonts.status === "loaded",
+          sinceChange: performance.now() - (changed ?? 0),
+        };
+      }),
+    );
 
+  // Opens the page and waits until every <Ghost> shows its content, or
+  // until nothing happens on the page for a while.
+  const load = async (): Promise<string | undefined> => {
+    activity();
     const started = Date.now();
     const response = await page.goto(url, { timeout: PAGE_TIMEOUT });
     if (response && response.status() >= 400) {
-      return { ...visit, error: `answered with ${response.status()}` };
+      return `answered with ${response.status()}`;
     }
     // A link to a file (image, PDF), not to a page.
     if (
       !(response?.headers()["content-type"] ?? "text/html").includes("html")
     ) {
-      return { ...visit, error: "is not a page" };
+      return "is not a page";
     }
-
     while (Date.now() - started < PAGE_TIMEOUT) {
-      const state = await page.evaluate(() => ({
-        ghosts: [...document.querySelectorAll("[data-ghost]")].map(
-          (element) => element.getAttribute("data-ghost") ?? "",
-        ),
-        fontsLoaded: document.fonts.status === "loaded",
-      }));
+      const now = await state();
       const before = visit.ghosts.size;
-      for (const name of state.ghosts) visit.ghosts.add(name);
-      if (visit.ghosts.size !== before) lastActivity = Date.now();
+      for (const name of now.ghosts) visit.ghosts.add(name);
+      if (visit.ghosts.size !== before) activity();
 
       const quiet = Date.now() - lastActivity;
-      const allMeasured =
-        visit.ghosts.size > 0 &&
-        [...visit.ghosts].every((name) => visit.measured.has(name));
-      // All done; the short pause lets a measurement after a late web font
-      // arrive.
-      if (allMeasured && state.fontsLoaded && quiet >= 300) break;
+      const allShown =
+        now.ghosts.length > 0 &&
+        now.ghosts.every((name) => now.shown.includes(name));
+      // All done; the short pause lets a late web font arrive.
+      if (allShown && now.fontsLoaded && quiet >= 300) break;
       // Nothing happens anymore; what still loads counts as never loading.
-      if (loading.size === 0 && quiet >= options.wait) break;
+      if (loading.size === 0 && quiet >= QUIET_TIME) break;
       await page.waitForTimeout(100);
     }
+    return undefined;
+  };
 
-    visit.links = await page.evaluate(() =>
-      [...document.querySelectorAll("a[href]:not([download])")].map(
-        (link) => (link as HTMLAnchorElement).href,
+  // The <Ghost>s loading right now, to tell which ones a tap starts.
+  const loadingNow = async (): Promise<Set<string>> => {
+    const now = await state();
+    return new Set(now.ghosts.filter((name) => !now.shown.includes(name)));
+  };
+
+  // Waits until a tap is done: no request running and the page unchanged
+  // for a moment. At most QUIET_TIME. A <Ghost> that started loading with
+  // the tap (`loadingBefore` didn't have it) may load without a request
+  // and without changing the page (a timer, a cache, a worker): it is
+  // waited for like on load, until it shows its content or the page stays
+  // quiet for QUIET_TIME.
+  const settle = async (loadingBefore?: Set<string>): Promise<void> => {
+    const started = Date.now();
+    await page.waitForTimeout(50);
+    while (Date.now() - started < PAGE_TIMEOUT) {
+      const now = await state();
+      for (const name of now.ghosts) visit.ghosts.add(name);
+      const quiet =
+        loading.size === 0 &&
+        now.sinceChange >= 150 &&
+        Date.now() - lastActivity >= 150;
+      const waiting = loadingBefore
+        ? now.ghosts.some(
+            (name) => !now.shown.includes(name) && !loadingBefore.has(name),
+          )
+        : false;
+      if (!waiting) {
+        if (quiet || Date.now() - started >= QUIET_TIME) return;
+      } else if (
+        loading.size === 0 &&
+        Math.min(now.sinceChange, Date.now() - lastActivity) >= QUIET_TIME
+      ) {
+        // Still loading, but nothing happens anymore: never loads.
+        return;
+      }
+      await page.waitForTimeout(50);
+    }
+  };
+
+  // Measures the shown <Ghost>s not measured yet, at every width of the
+  // range, and goes back to the first width.
+  // A <Ghost> measured hidden (no space, e.g. in a sidebar hidden below lg)
+  // is measured again once a tap shows it, or one of the same name.
+  const measureNew = async (): Promise<void> => {
+    const { shown } = await state();
+    const hidden = new Set(
+      [...visit.measured]
+        .filter(([, entry]) => Object.values(entry).every(isEmpty))
+        .map(([name]) => name),
+    );
+    const showing = new Set(
+      hidden.size === 0
+        ? []
+        : (await measureAt(page, [...hidden]))
+            .filter((result) => !isEmpty(result.measurement))
+            .map((result) => result.name),
+    );
+    const names = [...new Set(shown)].filter(
+      (name) => !visit.measured.has(name) || showing.has(name),
+    );
+    if (names.length === 0) return;
+    for (const [name, entry] of await sweep(page, names, range)) {
+      visit.measured.set(name, entry);
+    }
+  };
+
+  // Links to pages, not to files (`download`) or to a place on this page
+  // (`#top`): that one resolves to the current URL, also to a query a tap
+  // added (`?item=3#top`), which is no page of its own. The routes of a
+  // hash router (`#/orders`) are pages.
+  const collectLinks = async (): Promise<void> => {
+    const links = await readPage(page, () =>
+      page.evaluate(() =>
+        [...document.querySelectorAll("a[href]:not([download])")]
+          .filter((link) => {
+            const href = link.getAttribute("href") ?? "";
+            return !href.startsWith("#") || /^#!?\//.test(href);
+          })
+          .map((link) => (link as HTMLAnchorElement).href),
       ),
     );
+    for (const link of links) visit.links.add(link);
+  };
+
+  try {
+    const error = await load();
+    if (error) return { ...visit, error };
+    await measureNew();
+    await collectLinks();
+    await tapEverything(page, url, {
+      settle,
+      loadingNow,
+      load,
+      measureNew,
+      collectLinks,
+      tapped: () => visit.taps++,
+      navigated: (link) => visit.links.add(link),
+    });
     return visit;
   } catch (error) {
     return { ...visit, error: (error as Error).message.split("\n")[0] ?? "" };
   } finally {
     await page.close();
   }
+}
+
+// Reads the page. A tap may start a navigation while it is read (a form
+// that posts, blocked, shows an error page; `location.href = ...`): read
+// again once the new document is there, instead of failing the page.
+async function readPage<T>(page: Page, read: () => Promise<T>): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await read();
+    } catch (error) {
+      const navigated = /Execution context was destroyed|navigat/i.test(
+        (error as Error).message,
+      );
+      if (!navigated || attempt >= 5) throw error;
+      await page.waitForLoadState("domcontentloaded").catch(() => {});
+    }
+  }
+}
+
+// Content that takes no space: hidden at this width, or nothing at all.
+const isEmpty = ({ width, height }: { width: number; height: number }) =>
+  width === 0 || height === 0;
+
+// Steps (px) between the widths measured first. Where a <Ghost> changes
+// its layout between two of them, the exact width is searched in between.
+const STEP = 8;
+
+// Measures the given <Ghost>s across the range and turns the measurements
+// into the entry for `ghostly.json` (see fit.ts): every STEP pixels, and
+// where something changed, exact to the pixel by halving the step.
+async function sweep(
+  page: Page,
+  names: string[],
+  range: MeasuredRange,
+): Promise<Map<string, GhostlyEntry>> {
+  const segments = new Map<string, Segment[]>();
+  const sampleAt = async (
+    width: number,
+    only: string[],
+  ): Promise<Map<string, Sample>> => {
+    await page.setViewportSize({ width, height: WINDOW_HEIGHT });
+    const samples = new Map<string, Sample>();
+    for (const result of await measureAt(page, only)) {
+      // Two <Ghost>s with the same name: the first shown one counts. One
+      // hidden at this width (the same summary in a sidebar and in a
+      // sheet) takes no space and gives way to the other.
+      const before = samples.get(result.name);
+      if (
+        before &&
+        (!isEmpty(before.measurement) || isEmpty(result.measurement))
+      )
+        continue;
+      samples.set(result.name, {
+        width,
+        measurement: result.measurement,
+        parentWidth: result.parentWidth,
+      });
+    }
+    return samples;
+  };
+
+  // Adds the samples of `name` up to `sample`. A jump between two samples
+  // (a word that moves to the next line) only shows if a sample in between
+  // is off the line from the segment's start to the new sample. So the
+  // samples get at most twice as far from the start as the one before
+  // (1, 2, 4, 8px after a new segment starts), and every jump of more than
+  // the tolerance moves that one off the line. Where a sample doesn't fit,
+  // the exact width is found by halving.
+  const advance = async (name: string, sample: Sample) => {
+    const list = segments.get(name)!;
+    while (true) {
+      const segment = list.at(-1)!;
+      const first = segment[0]!;
+      const last = segment.at(-1)!;
+      if (last.width >= sample.width) return;
+      const next = Math.min(
+        sample.width,
+        last.width + Math.max(1, last.width - first.width),
+      );
+      const probe =
+        next === sample.width
+          ? sample
+          : (await sampleAt(next, [name])).get(name);
+      if (probe && fits(segment, probe)) {
+        segment.push(probe);
+        continue;
+      }
+      // The first width in (low, high] that doesn't fit.
+      let low = last.width;
+      let high = next;
+      let found = probe;
+      while (high - low > 1) {
+        const middle = Math.floor((low + high) / 2);
+        const between = (await sampleAt(middle, [name])).get(name);
+        if (between && fits(segment, between)) {
+          segment.push(between);
+          low = middle;
+        } else {
+          high = middle;
+          found = between;
+        }
+      }
+      if (!found || found.width !== high) {
+        found = (await sampleAt(high, [name])).get(name);
+      }
+      // Gone at this width (the app removed it): it starts again later.
+      if (!found) return;
+      list.push([found]);
+    }
+  };
+
+  for (let width = range.start; ; width = Math.min(width + STEP, range.end)) {
+    const samples = await sampleAt(width, names);
+    for (const [name, sample] of samples) {
+      const list = segments.get(name);
+      if (!list) segments.set(name, [[sample]]);
+      else await advance(name, sample);
+    }
+    if (width >= range.end) break;
+  }
+  await page.setViewportSize({ width: range.start, height: WINDOW_HEIGHT });
+  await measureAt(page, []);
+
+  const entries = new Map<string, GhostlyEntry>();
+  for (const [name, list] of segments) {
+    const entry: GhostlyEntry = {};
+    for (const [index, segment] of list.entries()) {
+      const width = segment[0]?.width ?? range.start;
+      // The first one is the breakpoint itself, also when the <Ghost> only
+      // showed up at a larger width.
+      const key = index === 0 ? range.name : `${range.name}@${width}`;
+      entry[key] = measurementOf(segment);
+    }
+    entries.set(name, entry);
+  }
+  return entries;
+}
+
+// Waits two frames for the app to follow a new window width (media query
+// listeners, ResizeObserver), then measures the shown <Ghost>s.
+async function measureAt(
+  page: Page,
+  names: string[],
+): Promise<GhostMeasureResult[]> {
+  return readPage(page, () =>
+    page.evaluate(
+      ([names, measureAll]) =>
+        new Promise<GhostMeasureResult[]>((done) =>
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() => {
+              const measure = (
+                window as unknown as Record<
+                  string,
+                  ((names: string[]) => GhostMeasureResult[]) | undefined
+                >
+              )[measureAll];
+              done(names.length > 0 && measure ? measure(names) : []);
+            }),
+          ),
+        ),
+      [names, MEASURE_ALL] as const,
+    ),
+  );
+}
+
+// Taps every element that reacts to a tap, newest first: what a tap opens
+// (a menu, a dialog) is tapped before the rest of the page, so its buttons
+// are reached while it is open. Each element once; elements that look the
+// same (the "Delete" button of every row) count as one.
+async function tapEverything(
+  page: Page,
+  url: string,
+  hooks: {
+    settle: (loadingBefore?: Set<string>) => Promise<void>;
+    loadingNow: () => Promise<Set<string>>;
+    load: () => Promise<string | undefined>;
+    measureNew: () => Promise<void>;
+    collectLinks: () => Promise<void>;
+    tapped: () => void;
+    navigated: (link: string) => void;
+  },
+): Promise<void> {
+  // Only reading from now on.
+  await page.route("**/*", (route) =>
+    READING.has(route.request().method())
+      ? route.fallback()
+      : route.abort("blockedbyclient"),
+  );
+  const started = Date.now();
+  const done = new Set<string>();
+  // When each element showed up first: the number of taps before.
+  const appeared = new Map<string, number>();
+  let taps = 0;
+  // Loaded again and nothing tapped since: what is still missing can't be
+  // reached from the start of the page either.
+  let reloaded = false;
+
+  while (taps < MAX_TAPS && Date.now() - started < TAP_TIMEOUT) {
+    const candidates = await tappable(page);
+    for (const { key } of candidates) {
+      if (!appeared.has(key)) appeared.set(key, taps);
+    }
+    const open = candidates.filter(({ key }) => !done.has(key));
+    if (open.length === 0) {
+      // Elements seen before are gone: a tap switched the view without
+      // changing the URL (tabs that swap the content, a wizard). They
+      // show again at the start of the page, so it is loaded again.
+      const missed = [...appeared.keys()].some((key) => !done.has(key));
+      if (!missed || reloaded) break;
+      reloaded = true;
+      if (await hooks.load()) return;
+      continue;
+    }
+    // The newest ones, in the order of the page.
+    const newest = Math.max(...open.map(({ key }) => appeared.get(key) ?? 0));
+    const next = open.find(({ key }) => appeared.get(key) === newest);
+    if (!next) break;
+    done.add(next.key);
+
+    const target = page.locator(`[data-ghostly-tap="${next.id}"]`);
+    // Something newer is still open (a menu, a dialog) and all of it was
+    // tapped: close it first, as a user would.
+    const present = Math.max(
+      ...candidates.map(({ key }) => appeared.get(key) ?? 0),
+    );
+    if (newest < present) {
+      await page.keyboard.press("Escape").catch(() => {});
+      await hooks.settle();
+    }
+    const loadingBefore = await hooks.loadingNow();
+    try {
+      await target.click({ timeout: 1000 });
+    } catch {
+      // Covered by something opened before (a dialog): close it, try again.
+      await page.keyboard.press("Escape").catch(() => {});
+      try {
+        await target.click({ timeout: 1000 });
+      } catch {
+        debug(page, `can't tap ${next.key}`);
+        continue;
+      }
+    }
+    debug(page, `tapped ${next.key}`);
+    taps++;
+    reloaded = false;
+    hooks.tapped();
+    await hooks.settle(loadingBefore);
+    // A menu that opens on hover (another menu was open) was opened by the
+    // pointer and closed again by the tap: tap once more to open it.
+    const expanded = await target
+      .getAttribute("aria-expanded", { timeout: 200 })
+      .catch(() => null);
+    if (expanded === "false") {
+      await target.click({ timeout: 1000 }).catch(() => {});
+      await hooks.settle(loadingBefore);
+    }
+
+    // The tap went to another page: that one is measured on its own. Only
+    // another query (`?item=3`, a dialog or tab that keeps its state in
+    // the URL) is the same page: what it shows is measured right here.
+    // A blocked form post lands on Chrome's error page, another origin.
+    const now = new URL(page.url());
+    const start = new URL(url);
+    if (
+      now.origin !== start.origin ||
+      now.pathname !== start.pathname ||
+      routeOf(now) !== routeOf(start)
+    ) {
+      hooks.navigated(page.url());
+      if (await hooks.load()) return;
+      continue;
+    }
+    await hooks.measureNew();
+    await hooks.collectLinks();
+  }
+}
+
+// With GHOSTLY_DEBUG=1, what is tapped, per window width.
+function debug(page: Page, message: string): void {
+  if (!process.env.GHOSTLY_DEBUG) return;
+  const width = page.viewportSize()?.width ?? 0;
+  process.stderr.write(
+    `[${width}] ${new URL(page.url()).pathname} ${message}\n`,
+  );
+}
+
+// The elements on the page that do something when tapped, visible and
+// enabled. Each gets a `data-ghostly-tap` id to tap it by, and a key that
+// is the same for elements that look the same.
+async function tappable(page: Page): Promise<{ id: string; key: string }[]> {
+  return readPage(page, () =>
+    page.evaluate((logout) => {
+      const selector = [
+        "button",
+        "summary",
+        "input[type=checkbox]",
+        "input[type=radio]",
+        "[role=button]",
+        "[role=tab]",
+        "[role=menuitem]",
+        "[role=menuitemcheckbox]",
+        "[role=menuitemradio]",
+        "[role=option]",
+        "[role=combobox]",
+        "[role=switch]",
+        "[role=checkbox]",
+        "[role=radio]",
+        "[role=treeitem]",
+        "[aria-haspopup]:not([aria-haspopup=false])",
+        "[aria-expanded]",
+      ].join(",");
+      const pattern = new RegExp(logout, "i");
+      // What the element says: its label or text, short. A checkbox or radio
+      // has no text of its own; it says what its <label> says, or its value.
+      const labelOf = (element: HTMLElement) => {
+        const input = element as HTMLInputElement;
+        return (
+          element.getAttribute("aria-label") ||
+          element.title ||
+          element.innerText ||
+          [...(input.labels ?? [])].map((label) => label.innerText).join(" ") ||
+          (element.localName === "input" ? input.value : "") ||
+          ""
+        )
+          .trim()
+          .slice(0, 80);
+      };
+      const counter = window as unknown as { __ghostlyTapId?: number };
+      return [...document.querySelectorAll<HTMLElement>(selector)]
+        .filter((element) => {
+          // Links are pages of their own; skipped on purpose, or disabled.
+          if (element.matches("a[href]")) return false;
+          if (element.closest("[data-ghostly-skip]")) return false;
+          if (
+            (element as HTMLButtonElement).disabled ||
+            element.closest("[aria-disabled=true], fieldset:disabled, [inert]")
+          ) {
+            return false;
+          }
+          const rect = element.getBoundingClientRect();
+          if (rect.width === 0 || rect.height === 0) return false;
+          if (
+            !element.checkVisibility({
+              opacityProperty: true,
+              visibilityProperty: true,
+            })
+          ) {
+            return false;
+          }
+          const label = labelOf(element);
+          return !pattern.test(label);
+        })
+        .map((element) => {
+          element.dataset.ghostlyTap ??= String(
+            (counter.__ghostlyTapId = (counter.__ghostlyTapId ?? 0) + 1),
+          );
+          const className =
+            typeof element.className === "string" ? element.className : "";
+          return {
+            id: element.dataset.ghostlyTap,
+            key: [
+              element.localName,
+              element.getAttribute("role") ?? "",
+              labelOf(element),
+              className.slice(0, 200),
+            ].join("|"),
+          };
+        });
+    }, LOGOUT.source),
+  );
 }

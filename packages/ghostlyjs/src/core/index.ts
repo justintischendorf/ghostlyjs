@@ -6,11 +6,23 @@ import type {
   MeasureOptions,
 } from "./types";
 
-// Default port of the `ghostly dev` collector.
-export const DEFAULT_PORT = 6767;
-
 // Set on `window` by `ghostly measure` in the browser it opens.
 export const MEASURE_FLAG = "__ghostlyMeasure";
+
+// Set on `window` by <Ghost> in the browser of `ghostly measure`: a
+// function that measures the shown <Ghost>s (all, or the given names) right
+// now and returns `GhostMeasureResult`s. The command calls it at every
+// window width.
+export const MEASURE_ALL = "__ghostlyMeasureAll";
+
+// One shown <Ghost>, measured by `MEASURE_ALL`.
+export type GhostMeasureResult = {
+  name: string;
+  measurement: GhostBoxMeasurement;
+  // The width that a percentage width of the skeleton refers to, see
+  // `parentWidthOf`.
+  parentWidth?: number;
+};
 
 // Whether the page runs in the browser of `ghostly measure`. For apps whose
 // content only shows after a click (demos, a loading toggle): they can show
@@ -22,6 +34,7 @@ export function isMeasuring(): boolean {
 
 export type {
   Breakpoints,
+  Calc,
   GhostBoxContent,
   GhostlyData,
   GhostlyEntry,
@@ -30,12 +43,19 @@ export type {
 } from "./types";
 export {
   BASE,
+  boundariesOf,
   breakpointCss,
   breakpointOf,
+  breakpointOfKey,
   DEFAULT_BREAKPOINTS,
-  hideClass,
+  fromClass,
+  keyAt,
+  minWidthOf,
   rangesOf,
+  toClass,
+  variantClasses,
   variantsOf,
+  WIDTH_SEPARATOR,
   type BreakpointRange,
   type GhostVariant,
 } from "./breakpoints";
@@ -156,7 +176,8 @@ export function measureElement(
       if (
         style.display === "none" ||
         style.visibility === "hidden" ||
-        style.opacity === "0"
+        style.opacity === "0" ||
+        isClippedAway(style)
       ) {
         continue;
       }
@@ -184,7 +205,7 @@ export function measureElement(
     flexShrink: first
       ? parseFloat(getComputedStyle(first).flexShrink)
       : undefined,
-    align: alignmentOf(root, frame),
+    ...placementOf(root, frame),
     boxes: [...boxes, ...mergeLines(lines)],
     // How many items the list had, for <Ghost count>.
     ...(options.list && { count: items.length }),
@@ -255,19 +276,61 @@ function textRect(node: Text): DOMRect {
   );
 }
 
-// Content narrower than its parent can be centered (`mx-auto`) or pushed to
-// the right (`ml-auto`). The skeleton gets the same auto margins. Only for
-// block parents and flex columns: in a flex row, auto margins would change
-// how the space is shared with the siblings.
-function alignmentOf(
-  root: Element,
-  frame: DOMRect,
-): "center" | "right" | undefined {
+// The element the skeleton sits in: the parent of the <Ghost> wrapper,
+// skipping elements with `display: contents` like the wrapper itself.
+function parentOf(root: Element): Element | null {
   let parent = root.parentElement;
   while (parent && getComputedStyle(parent).display === "contents") {
     parent = parent.parentElement;
   }
-  if (!parent || frame.width === 0) return undefined;
+  return parent;
+}
+
+// The width a percentage width of the skeleton refers to: the content box
+// of its parent, or in a grid the cell, which a skeleton fills like the
+// content (`justify-self: stretch`). Undefined for parents whose width
+// depends on the content (inline-flex, table cells): there it can't be
+// compared at two window widths.
+export function parentWidthOf(root: Element): number | undefined {
+  const parent = parentOf(root);
+  if (!(parent instanceof HTMLElement)) return undefined;
+  const style = getComputedStyle(parent);
+  if (style.display === "grid") {
+    const item = [...childNodesOf(root)].find(
+      (node): node is HTMLElement => node instanceof HTMLElement,
+    );
+    if (!item) return undefined;
+    const itemStyle = getComputedStyle(item);
+    if (!["auto", "normal", "stretch"].includes(itemStyle.justifySelf)) {
+      return undefined;
+    }
+    return round(
+      item.getBoundingClientRect().width +
+        parseFloat(itemStyle.marginLeft) +
+        parseFloat(itemStyle.marginRight),
+    );
+  }
+  if (!["block", "flow-root", "list-item", "flex"].includes(style.display)) {
+    return undefined;
+  }
+  return round(
+    parent.clientWidth -
+      parseFloat(style.paddingLeft) -
+      parseFloat(style.paddingRight),
+  );
+}
+
+// Content as wide as its parent fills it (`fill`), so the skeleton grows
+// with the parent too. Narrower content can be centered (`mx-auto`) or
+// pushed to the right (`ml-auto`); the skeleton gets the same auto margins.
+// Only for block parents and flex columns: in a flex row, the width and the
+// auto margins come from how the space is shared with the siblings.
+function placementOf(
+  root: Element,
+  frame: DOMRect,
+): { align?: "center" | "right"; fill?: true } {
+  const parent = parentOf(root);
+  if (!parent || frame.width === 0) return {};
 
   const style = getComputedStyle(parent);
   const isColumn =
@@ -276,7 +339,7 @@ function alignmentOf(
     !["block", "flow-root", "list-item"].includes(style.display) &&
     !isColumn
   ) {
-    return undefined;
+    return {};
   }
 
   const rect = parent.getBoundingClientRect();
@@ -291,22 +354,25 @@ function alignmentOf(
   const left = frame.left - innerLeft;
   const right = innerRight - frame.right;
 
-  if (left < 1) return undefined;
-  if (Math.abs(left - right) < 1) return "center";
-  if (right < 1) return "right";
-  return undefined;
+  if (left < 1) return right < 1 ? { fill: true } : {};
+  if (Math.abs(left - right) < 1) return { align: "center" };
+  if (right < 1) return { align: "right" };
+  return {};
 }
 
 // Text is split into one rect per text node: "Hello <b>world</b>" gives
 // two, and so does React's `{value}%`. Pieces next to each other on the
-// same line are joined into one bar.
+// same line are joined into one bar. Left to right, so a piece is only
+// joined to one on its left: pieces of one line can sit a bit higher or
+// lower (bigger text, like a score between two names), and sorted by height
+// first, a piece could be joined into one on its right and vanish.
 function mergeLines(lines: GhostBoxContent[]): GhostBoxContent[] {
-  const sorted = [...lines].sort((a, b) => a.y - b.y || a.x - b.x);
+  const sorted = [...lines].sort((a, b) => a.x - b.x || a.y - b.y);
   const merged: GhostBoxContent[] = [];
 
   for (const line of sorted) {
-    const last = merged.at(-1);
-    if (!last || !isNextOnSameLine(last, line)) {
+    const last = merged.find((bar) => isNextOnSameLine(bar, line));
+    if (!last) {
       merged.push({ ...line });
       continue;
     }
@@ -317,7 +383,7 @@ function mergeLines(lines: GhostBoxContent[]): GhostBoxContent[] {
     last.width = round(right - last.x);
     last.height = round(bottom - top);
   }
-  return merged;
+  return merged.sort((a, b) => a.y - b.y || a.x - b.x);
 }
 
 // `b` overlaps `a` vertically by at least half and starts at most half a
@@ -393,6 +459,14 @@ function clipOf(
     clip?.bottom ?? Infinity,
   );
   return new DOMRect(left, top, right - left, bottom - top);
+}
+
+// Hidden by clipping, like `sr-only` (only for screen readers): Tailwind
+// v4 uses `clip-path: inset(50%)`, older CSS `clip: rect(0 0 0 0)`.
+function isClippedAway(style: CSSStyleDeclaration): boolean {
+  return (
+    style.clipPath === "inset(50%)" || style.clip === "rect(0px, 0px, 0px, 0px)"
+  );
 }
 
 // True if the element paints something itself. Only used to decide whether

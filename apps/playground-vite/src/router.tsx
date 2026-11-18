@@ -18,11 +18,22 @@ export function usePathname(): string {
   return useSyncExternalStore(subscribe, () => window.location.pathname);
 }
 
-export function navigate(href: string): void {
-  window.history.pushState(null, "", href);
+// A query parameter of the current URL, e.g. "3" for `?item=3`.
+export function useSearchParam(name: string): string | null {
+  return useSyncExternalStore(subscribe, () =>
+    new URLSearchParams(window.location.search).get(name),
+  );
+}
+
+export function navigate(
+  href: string,
+  { replace = false, scroll = true } = {},
+): void {
+  if (replace) window.history.replaceState(null, "", href);
+  else window.history.pushState(null, "", href);
   // `pushState` doesn't fire `popstate` on its own.
   window.dispatchEvent(new PopStateEvent("popstate"));
-  window.scrollTo(0, 0);
+  if (scroll) window.scrollTo(0, 0);
 }
 
 type LinkProps = AnchorHTMLAttributes<HTMLAnchorElement> & { href: string };
@@ -31,14 +42,16 @@ type LinkProps = AnchorHTMLAttributes<HTMLAnchorElement> & { href: string };
 export function Link({ href, onClick, ...props }: LinkProps) {
   function handleClick(event: MouseEvent<HTMLAnchorElement>) {
     onClick?.(event);
-    // Leave new tabs (Cmd/Ctrl click) and other buttons to the browser.
+    // Leave new tabs (Cmd/Ctrl click), other buttons and other sites to the
+    // browser.
     if (
       event.defaultPrevented ||
       event.button !== 0 ||
       event.metaKey ||
       event.ctrlKey ||
       event.shiftKey ||
-      event.altKey
+      event.altKey ||
+      !href.startsWith("/")
     ) {
       return;
     }

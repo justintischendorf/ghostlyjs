@@ -1,4 +1,6 @@
-import { Moon, Sun } from "lucide-react";
+"use client";
+
+import { Moon, Sun, SunMoon } from "lucide-react";
 import { useState, useSyncExternalStore } from "react";
 
 const query = "(prefers-color-scheme: dark)";
@@ -16,6 +18,8 @@ export default function ThemeToggle() {
   const systemIsDark = useSyncExternalStore(
     subscribe,
     () => window.matchMedia(query).matches,
+    // The server can't know the setting.
+    () => undefined,
   );
   const [chosen, setChosen] = useState<boolean>();
   const isDark = chosen ?? systemIsDark;
@@ -27,7 +31,7 @@ export default function ThemeToggle() {
   }
 
   const label = isDark ? "Switch to light mode" : "Switch to dark mode";
-  const Icon = isDark ? Sun : Moon;
+  const Icon = isDark === undefined ? SunMoon : isDark ? Sun : Moon;
   return (
     <button
       type="button"

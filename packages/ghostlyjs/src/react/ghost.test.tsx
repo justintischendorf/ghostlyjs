@@ -1,10 +1,5 @@
 // Tests for <Ghost> and <GhostlyProvider> in dev mode (`NODE_ENV` is
 // "development", see vitest.config.ts). Production: ghost.prod.test.tsx.
-//
-// <Ghost> remembers per page load whether `ghostly dev` answered. Each test
-// file runs in its own page, but the tests in one file share it. So every
-// test here has the collector online; the offline case has its own file
-// (collector-offline.test.tsx).
 
 import { afterEach, describe, expect, test, vi } from "vitest";
 
@@ -17,7 +12,8 @@ import {
   cleanup,
   everywhere,
   flush,
-  mockCollector,
+  measureAll,
+  measuring,
   render,
 } from "./test-utils";
 
@@ -33,7 +29,6 @@ const content = (
 
 describe("content", () => {
   test("is shown when not loading", async () => {
-    mockCollector(true);
     const { container } = await render(
       <Ghost name="a" isLoading={false}>
         {content}
@@ -44,7 +39,6 @@ describe("content", () => {
   });
 
   test("sits in a `display: contents` wrapper, so layouts stay intact", async () => {
-    mockCollector(true);
     const { container } = await render(
       <Ghost name="a" isLoading={false}>
         {content}
@@ -57,7 +51,6 @@ describe("content", () => {
 
 describe("skeleton", () => {
   test("is one placeholder bar when never measured", async () => {
-    mockCollector(true);
     const { container } = await render(
       <GhostlyProvider data={{}}>
         <Ghost name="a" isLoading>
@@ -150,6 +143,74 @@ describe("skeleton", () => {
     expect(boxes[1]?.getBoundingClientRect().width).toBe(40);
   });
 
+  test("a tall box (a card) stretches like a wide one", async () => {
+    const tall = {
+      width: 200,
+      height: 400,
+      fill: true,
+      // Tall, and also a large square-ish card.
+      boxes: [
+        { x: 0, y: 0, width: 200, height: 400, radius: 12 },
+        { x: 0, y: 0, width: 200, height: 250, radius: 12 },
+      ],
+    };
+    const { container } = await render(
+      <GhostlyProvider data={{ card: everywhere(tall) }}>
+        <Ghost name="card" isLoading>
+          {content}
+        </Ghost>
+      </GhostlyProvider>,
+      300,
+    );
+    const boxes = [...container.querySelectorAll(".ghostly-box")];
+    expect(boxes.map((box) => box.getBoundingClientRect().width)).toEqual([
+      300, 300,
+    ]);
+  });
+
+  test("with fill, grows with a wider parent", async () => {
+    const { container } = await render(
+      <GhostlyProvider data={{ card: everywhere({ ...card, fill: true }) }}>
+        <Ghost name="card" isLoading>
+          {content}
+        </Ghost>
+      </GhostlyProvider>,
+      300,
+    );
+    const skeleton = container.querySelector(".ghostly-skeleton");
+    expect(skeleton?.getBoundingClientRect().width).toBe(300);
+  });
+
+  test("without fill, keeps the measured width in a wider parent", async () => {
+    const { container } = await render(
+      <GhostlyProvider data={{ card: everywhere(card) }}>
+        <Ghost name="card" isLoading>
+          {content}
+        </Ghost>
+      </GhostlyProvider>,
+      300,
+    );
+    const skeleton = container.querySelector(".ghostly-skeleton");
+    expect(skeleton?.getBoundingClientRect().width).toBe(200);
+  });
+
+  // A parent sized by its content, like a toolbar with `w-auto`: it makes
+  // room for the measured width instead of wrapping its other children.
+  test("a parent sized by its content makes room for it", async () => {
+    const { container } = await render(
+      <GhostlyProvider data={{ card: everywhere(card) }}>
+        <div id="toolbar" style={{ display: "inline-flex", gap: 8 }}>
+          <span style={{ width: 50, height: 10 }} />
+          <Ghost name="card" isLoading>
+            {content}
+          </Ghost>
+        </div>
+      </GhostlyProvider>,
+    );
+    const toolbar = container.querySelector("#toolbar");
+    expect(toolbar?.getBoundingClientRect().width).toBe(258);
+  });
+
   test.each([
     ["center", "auto", "auto"],
     ["right", "auto", ""],
@@ -165,6 +226,46 @@ describe("skeleton", () => {
     const skeleton = container.querySelector<HTMLElement>(".ghostly-skeleton");
     expect(skeleton?.style.marginLeft).toBe(left);
     expect(skeleton?.style.marginRight).toBe(right);
+  });
+
+  // Measured by `ghostly measure` at every width: sizes as calc().
+  test("a fluid measurement follows its parent like the content", async () => {
+    const fluid = {
+      width: 150,
+      height: 40,
+      fluid: true,
+      // 100% of the parent minus a 50px sidebar.
+      widthCalc: [-50, 100],
+      boxes: [
+        // A button pushed to the right edge: moves, keeps its width.
+        {
+          x: 50,
+          y: 0,
+          width: 100,
+          height: 40,
+          radius: 8,
+          xCalc: [-100, 100],
+        },
+        // An icon on the left: keeps its place and size.
+        { x: 0, y: 0, width: 40, height: 40, radius: 8 },
+      ],
+    };
+    const { container } = await render(
+      <GhostlyProvider data={{ bar: everywhere(fluid) }}>
+        <Ghost name="bar" isLoading>
+          {content}
+        </Ghost>
+      </GhostlyProvider>,
+      400,
+    );
+    const skeleton = container.querySelector(".ghostly-skeleton")!;
+    const frame = skeleton.getBoundingClientRect();
+    expect(frame.width).toBe(350);
+    const [button, icon] = [...skeleton.querySelectorAll(".ghostly-box")].map(
+      (box) => box.getBoundingClientRect(),
+    );
+    expect(button).toMatchObject({ x: 250, width: 100 });
+    expect(icon).toMatchObject({ x: 0, width: 40 });
   });
 
   test("keeps the measured flex-shrink", async () => {
@@ -234,7 +335,6 @@ describe("isMeasuring", () => {
 
 describe("measuring in dev mode", () => {
   test("a fresh measurement replaces the stored one", async () => {
-    mockCollector(true);
     const stored = { width: 10, height: 10, boxes: [] };
     const ui = (isLoading: boolean) => (
       <GhostlyProvider data={{ a: everywhere(stored) }}>
@@ -253,83 +353,69 @@ describe("measuring in dev mode", () => {
     });
   });
 
-  test("sends the measurement to `ghostly dev`", async () => {
-    const fetch = mockCollector(true);
-    const info = vi.spyOn(console, "info");
-    await render(
-      <Ghost name="a" isLoading={false}>
-        {content}
-      </Ghost>,
-    );
-    await flush();
-
-    expect(fetch).toHaveBeenCalledTimes(1);
-    const [url, init] = fetch.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toBe("http://localhost:6767");
-    expect(init.method).toBe("PATCH");
-    expect(JSON.parse(init.body as string)).toEqual({
-      name: "a",
-      // Vitest's window is 414px wide: below Tailwind's `sm`.
-      breakpoint: "base",
-      measurement: expect.objectContaining({ width: 300, height: 50 }),
-    });
-    // The hint that `ghostly dev` isn't running only shows without it.
-    expect(info).not.toHaveBeenCalled();
-    info.mockRestore();
-  });
-
-  test("measures again when the content is shown again", async () => {
-    const fetch = mockCollector(true);
+  test("a fresh measurement replaces only the variant of its width", async () => {
+    const stored = (height: number) => ({ width: 10, height, boxes: [] });
+    // Vitest's window is 414px wide: in "base@390".
+    const data = { a: { base: stored(10), "base@390": stored(20) } };
     const ui = (isLoading: boolean) => (
-      <Ghost name="a" isLoading={isLoading}>
-        {content}
-      </Ghost>
+      <GhostlyProvider data={data}>
+        <Ghost name="a" isLoading={isLoading}>
+          {content}
+        </Ghost>
+      </GhostlyProvider>
     );
-    const { rerender } = await render(ui(false));
+    const { container, rerender } = await render(ui(false));
     await rerender(ui(true));
-    await rerender(ui(false));
-    await flush();
-    expect(fetch).toHaveBeenCalledTimes(2);
+
+    const heights = [...container.querySelectorAll(".ghostly-skeleton")].map(
+      (skeleton) => (skeleton as HTMLElement).style.height,
+    );
+    expect(heights).toEqual(["10px", "50px"]);
   });
 
   test("measures again when a web font arrived", async () => {
-    const fetch = mockCollector(true);
     const ui = (isLoading: boolean) => (
       <Ghost name="a" isLoading={isLoading}>
         <div id="text" style={{ width: 300, height: 50 }} />
       </Ghost>
     );
     const { container, rerender } = await render(ui(false));
-    await flush();
     // The font changes the size of the text.
     container.querySelector<HTMLElement>("#text")!.style.width = "320px";
     document.fonts.dispatchEvent(new Event("loadingdone"));
     await flush();
-
-    expect(fetch).toHaveBeenCalledTimes(2);
-    const [, init] = fetch.mock.calls[1] as unknown as [string, RequestInit];
-    expect(JSON.parse(init.body as string).measurement.width).toBe(320);
-
-    // While loading, the content isn't there: no measuring.
     await rerender(ui(true));
-    document.fonts.dispatchEvent(new Event("loadingdone"));
-    await flush();
-    expect(fetch).toHaveBeenCalledTimes(2);
+    const skeleton = container.querySelector(".ghostly-skeleton");
+    expect(skeleton?.getBoundingClientRect().width).toBe(320);
   });
+});
 
-  test("doesn't measure while loading", async () => {
-    const fetch = mockCollector(true);
+describe("in the browser of `ghostly measure`", () => {
+  test("shown <Ghost>s can be measured, with their parent's width", async () => {
+    measuring();
     await render(
-      <Ghost name="a" isLoading>
-        {content}
-      </Ghost>,
+      <>
+        <Ghost name="a" isLoading={false}>
+          {content}
+        </Ghost>
+        <Ghost name="b" isLoading>
+          {content}
+        </Ghost>
+      </>,
+      400,
     );
-    await flush();
-    expect(fetch).not.toHaveBeenCalled();
+    // "b" is loading: nothing to measure.
+    expect(measureAll()).toEqual([
+      {
+        name: "a",
+        measurement: expect.objectContaining({ width: 300, height: 50 }),
+        parentWidth: 400,
+      },
+    ]);
   });
 
-  test("with the collector online, every Ghost sends", async () => {
-    const fetch = mockCollector(true);
+  test("only the given names", async () => {
+    measuring();
     await render(
       <>
         {["a", "b", "c"].map((name) => (
@@ -339,8 +425,33 @@ describe("measuring in dev mode", () => {
         ))}
       </>,
     );
-    await flush();
-    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(measureAll(["b"]).map((result) => result.name)).toEqual(["b"]);
+  });
+
+  test("a <Ghost> that loads again or is removed isn't measured", async () => {
+    measuring();
+    const ui = (isLoading: boolean) => (
+      <Ghost name="a" isLoading={isLoading}>
+        {content}
+      </Ghost>
+    );
+    const { rerender, unmount } = await render(ui(false));
+    expect(measureAll()).toHaveLength(1);
+    await rerender(ui(true));
+    expect(measureAll()).toHaveLength(0);
+    await rerender(ui(false));
+    expect(measureAll()).toHaveLength(1);
+    unmount();
+    expect(measureAll()).toHaveLength(0);
+  });
+
+  test("outside of it, nothing registers", async () => {
+    await render(
+      <Ghost name="a" isLoading={false}>
+        {content}
+      </Ghost>,
+    );
+    expect(measureAll()).toEqual([]);
   });
 });
 
@@ -366,7 +477,6 @@ describe("lists (count)", () => {
   const item = { width: 400, height: 40, boxes: [], count: 3 };
 
   test("shows the measured item `count` times", async () => {
-    mockCollector(true);
     const { container } = await render(
       list(true, 5, { items: everywhere(item) }),
     );
@@ -374,7 +484,6 @@ describe("lists (count)", () => {
   });
 
   test("`count` alone shows as many as were measured", async () => {
-    mockCollector(true);
     const { container } = await render(
       list(true, true, { items: everywhere(item) }),
     );
@@ -382,7 +491,6 @@ describe("lists (count)", () => {
   });
 
   test("the skeletons are items of the list, so its gap applies", async () => {
-    mockCollector(true);
     const { container } = await render(
       list(true, 3, { items: everywhere(item) }),
     );
@@ -397,29 +505,25 @@ describe("lists (count)", () => {
   });
 
   test("without a measurement, one placeholder per item", async () => {
-    mockCollector(true);
     const { container } = await render(list(true, 4));
     expect(container.querySelectorAll(".ghostly-placeholder")).toHaveLength(4);
   });
 
   test("an empty list when measured still shows one skeleton", async () => {
-    mockCollector(true);
     const data = { items: everywhere({ ...item, count: 0 }) };
     const { container } = await render(list(true, true, data));
     expect(container.querySelectorAll(".ghostly-skeleton")).toHaveLength(1);
   });
 
-  test("measures the first item and sends the count", async () => {
-    const fetch = mockCollector(true);
+  test("measures the first item and the count", async () => {
+    measuring();
     const { container, rerender } = await render(list(false, true));
-    await flush();
-
-    const sent = JSON.parse(
-      (fetch.mock.calls.at(-1) as unknown as [string, RequestInit])[1]
-        .body as string,
-    );
-    expect(sent.name).toBe("items");
-    expect(sent.measurement).toMatchObject({ height: 40, count: 3 });
+    expect(measureAll()).toEqual([
+      expect.objectContaining({
+        name: "items",
+        measurement: expect.objectContaining({ height: 40, count: 3 }),
+      }),
+    ]);
 
     // The fresh measurement is used right away.
     await rerender(list(true, true));
@@ -431,7 +535,6 @@ describe("lists (count)", () => {
 
 describe("data-ghost", () => {
   test("marks the content, the skeleton and the placeholder", async () => {
-    mockCollector(true);
     const ui = (isLoading: boolean, data: GhostlyData) => (
       <GhostlyProvider data={data}>
         <Ghost name="a" isLoading={isLoading}>
