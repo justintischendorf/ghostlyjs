@@ -1,41 +1,42 @@
 // Reading and writing `ghostly.json` for `ghostly measure`.
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { relative, resolve } from "node:path";
+import { resolve } from "node:path";
 
 import type { GhostlyData } from "../core/types";
-import { CliError } from "./cli-error";
 
 // Next to the app's package.json, where the command runs.
 export function ghostlyFile(): string {
   return resolve(process.cwd(), "ghostly.json");
 }
 
-// A broken file (e.g. merge conflict markers) is an error the user can
-// fix, not a crash; overwriting it would lose the measurements in it.
-export function readGhostlyFile(file: string): GhostlyData {
+// The ghostly.json before, only to report which ghosts are gone. Every
+// run writes the file anew, so a broken one (e.g. merge conflict markers)
+// is simply replaced.
+export function readOldGhostlyFile(file: string): GhostlyData {
   if (!existsSync(file)) return {};
-  const broken = new CliError(
-    `${relative(process.cwd(), file)} is broken, e.g. by a merge conflict.\n` +
-      "Fix it, or delete it to measure everything again.",
-  );
-  let data: unknown;
   try {
-    data = JSON.parse(readFileSync(file, "utf8"));
+    const data: unknown = JSON.parse(readFileSync(file, "utf8"));
+    if (typeof data === "object" && data !== null && !Array.isArray(data)) {
+      return data as GhostlyData;
+    }
   } catch {
-    throw broken;
+    // Broken: nothing to compare with.
   }
-  if (typeof data !== "object" || data === null || Array.isArray(data)) {
-    throw broken;
-  }
-  return data as GhostlyData;
+  return {};
 }
 
-// Sorted by name, so the file only changes where values change.
+// Sorted by name and breakpoint, so the file only changes where values
+// change.
 export function writeGhostlyFile(file: string, data: GhostlyData): void {
-  writeFileSync(file, `${JSON.stringify(sortByKey(data), null, 2)}\n`);
+  const sorted = sortByKey(
+    Object.fromEntries(
+      Object.entries(data).map(([name, entry]) => [name, sortByKey(entry)]),
+    ),
+  );
+  writeFileSync(file, `${JSON.stringify(sorted, null, 2)}\n`);
 }
 
-export function sortByKey<T>(object: Record<string, T>): Record<string, T> {
+function sortByKey<T>(object: Record<string, T>): Record<string, T> {
   return Object.fromEntries(Object.entries(object).sort());
 }

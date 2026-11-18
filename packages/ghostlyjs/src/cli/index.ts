@@ -20,7 +20,6 @@ const USAGE = `${style("bold", "Usage")}
 
 ${style("bold", "Options of measure")}
   --pages /a,/b            pages no link points to
-  --prune                  remove ghosts from ghostly.json that no page showed
   --max-pages <n>          follow links to at most n pages (default 50)
   --max-taps <n>           tap at most n elements per page and width
                            (default 100, 0 for none)

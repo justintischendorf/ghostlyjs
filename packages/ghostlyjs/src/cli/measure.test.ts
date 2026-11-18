@@ -21,12 +21,7 @@ import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
 import { DEFAULT_BREAKPOINTS } from "../core/breakpoints";
 import type { GhostBoxMeasurement } from "../core/types";
-import {
-  measuredRangesOf,
-  mergeMeasurements,
-  pageOf,
-  parseOptions,
-} from "./measure";
+import { measuredRangesOf, pageOf, parseOptions } from "./measure";
 
 const measured = (height: number): GhostBoxMeasurement => ({
   width: 100,
@@ -39,7 +34,6 @@ describe("parseOptions", () => {
     expect(parseOptions(["http://localhost:3000"])).toEqual({
       url: "http://localhost:3000",
       pages: [],
-      prune: false,
       maxPages: 50,
       maxTaps: 100,
       cookies: [],
@@ -53,7 +47,6 @@ describe("parseOptions", () => {
         "http://localhost:3000",
         "--pages",
         "/a, /b,",
-        "--prune",
         "--max-pages",
         "5",
         "--max-taps",
@@ -67,7 +60,6 @@ describe("parseOptions", () => {
       ]),
     ).toMatchObject({
       pages: ["/a", "/b"],
-      prune: true,
       maxPages: 5,
       maxTaps: 0,
       cookies: [
@@ -136,54 +128,6 @@ describe("pageOf", () => {
     ["/auth/sign-out?next=/", undefined],
   ])("%s → %s", (href, page) => {
     expect(pageOf(href, origin)).toBe(page);
-  });
-});
-
-describe("mergeMeasurements", () => {
-  const data = {
-    kept: { base: measured(1) },
-    card: { base: measured(2), lg: measured(3) },
-  };
-
-  test("new measurements win, other breakpoints stay", () => {
-    expect(
-      mergeMeasurements(
-        data,
-        { card: { lg: measured(4) } },
-        { prune: false, seen: new Set(["card"]) },
-      ),
-    ).toEqual({
-      card: { base: measured(2), lg: measured(4) },
-      kept: { base: measured(1) },
-    });
-  });
-
-  test("a breakpoint measured again loses its old widths", () => {
-    expect(
-      mergeMeasurements(
-        {
-          card: { base: measured(1), "base@390": measured(2), md: measured(3) },
-        },
-        { card: { base: measured(4) } },
-        { prune: false, seen: new Set(["card"]) },
-      ),
-    ).toEqual({ card: { base: measured(4), md: measured(3) } });
-  });
-
-  test("prune removes ghosts no page showed", () => {
-    expect(
-      mergeMeasurements(data, {}, { prune: true, seen: new Set(["card"]) }),
-    ).toEqual({ card: data.card });
-  });
-
-  test("sorted by name and breakpoint", () => {
-    const merged = mergeMeasurements(
-      {},
-      { b: { md: measured(1), base: measured(1) }, a: { base: measured(1) } },
-      { prune: false, seen: new Set() },
-    );
-    expect(Object.keys(merged)).toEqual(["a", "b"]);
-    expect(Object.keys(merged.b ?? {})).toEqual(["base", "md"]);
   });
 });
 
@@ -426,7 +370,7 @@ async function measure(
     child.stderr.on("data", (chunk) => (output += chunk));
     const code = await new Promise((done) => child.once("exit", done));
     const text = existsSync(file) ? readFileSync(file, "utf8") : undefined;
-    // Left as it was when broken (see "a broken ghostly.json").
+    // Unchanged (e.g. still broken) when nothing was written.
     const data = text && text !== existing ? JSON.parse(text) : undefined;
     return { code, output, data };
   } finally {
@@ -588,21 +532,17 @@ describe.concurrent("ghostly measure", { timeout: 60_000 }, () => {
     ]);
   });
 
-  test("keeps the other ghosts, --prune removes them", async () => {
+  test("builds ghostly.json anew: nothing old stays", async () => {
     const existing = {
       old: { base: measured(1) },
-      a: { lg: measured(2) },
+      a: { lg: measured(2), "lg@1100": measured(3) },
     };
-    const args = [`${origin}/plain`, "--max-pages", "1"];
-
-    const kept = await measure(args, existing);
-    expect(Object.keys(kept.data)).toEqual(["a", "old"]);
-    // Breakpoints of the file that weren't measured stay.
-    expect(kept.data.a.lg).not.toEqual(measured(2));
-
-    const pruned = await measure([...args, "--prune"], existing);
-    expect(Object.keys(pruned.data)).toEqual(["a"]);
-    expect(pruned.output).toContain('Removed 1 ghost no page showed: "old"');
+    const { data, output } = await measure([`${origin}/plain`], existing);
+    expect(Object.keys(data)).toEqual(["a"]);
+    // Measured again, the old widths inside a breakpoint are gone too.
+    expect(data.a.lg).not.toEqual(measured(2));
+    expect(data.a).not.toHaveProperty("lg@1100");
+    expect(output).toContain('Removed 1 ghost no page showed: "old"');
   });
 
   test("waits for the app's requests, even longer than --wait", async () => {
@@ -701,13 +641,9 @@ describe.concurrent("ghostly measure", { timeout: 60_000 }, () => {
     expect(output).toContain("ghostly --help");
   });
 
-  test("a broken ghostly.json is an error, not a crash", async () => {
-    const start = Date.now();
-    const { code, output } = await measure([origin], "<<<<<<< HEAD\n");
-    expect(code).toBe(1);
-    // Before measuring any page, not after all of them.
-    expect(Date.now() - start).toBeLessThan(3000);
-    expect(output).toContain("ghostly.json is broken");
-    expect(output).not.toContain("SyntaxError");
+  test("a broken ghostly.json is replaced", async () => {
+    const { code, data } = await measure([`${origin}/plain`], "<<<<<<< HEAD\n");
+    expect(code).toBe(0);
+    expect(Object.keys(data)).toEqual(["a"]);
   });
 });

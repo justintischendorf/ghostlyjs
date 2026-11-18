@@ -71,8 +71,6 @@ test("ghostly measure measures every page at every breakpoint", async ({
         // The pretend login of the account page.
         "--cookie",
         "session=playground",
-        // Ghosts the playground no longer has are removed.
-        "--prune",
       ],
       { cwd: folder },
     );

@@ -36,8 +36,7 @@ import { CliError } from "./cli-error";
 import { fits, measurementOf, type Sample, type Segment } from "./fit";
 import {
   ghostlyFile,
-  readGhostlyFile,
-  sortByKey,
+  readOldGhostlyFile,
   writeGhostlyFile,
 } from "./ghostly-file";
 import { bar, header, progressLine, style } from "./style";
@@ -45,7 +44,6 @@ import { bar, header, progressLine, style } from "./style";
 export type MeasureCommandOptions = {
   url: string;
   pages: string[];
-  prune: boolean;
   maxPages: number;
   // Taps per page and window at most, so an endless chain (a "next" button
   // that always shows another one) ends.
@@ -83,7 +81,6 @@ export function parseOptions(args: string[]): MeasureCommandOptions {
       allowPositionals: true,
       options: {
         pages: { type: "string" },
-        prune: { type: "boolean", default: false },
         "max-pages": { type: "string", default: "50" },
         "max-taps": { type: "string", default: "100" },
         wait: { type: "string", default: "3000" },
@@ -136,7 +133,6 @@ export function parseOptions(args: string[]): MeasureCommandOptions {
       .split(",")
       .map((page) => page.trim())
       .filter(Boolean),
-    prune: values.prune,
     maxPages,
     maxTaps,
     cookies,
@@ -169,29 +165,6 @@ export function pageOf(href: string, origin: string): string | undefined {
   return url.pathname + url.search;
 }
 
-// The new measurements win; the other breakpoints of a <Ghost> stay. A
-// breakpoint measured again loses all its old keys ("base@390" too), its
-// layout may have changed elsewhere now. With `prune`, ghosts no page
-// showed are removed.
-export function mergeMeasurements(
-  data: GhostlyData,
-  measured: GhostlyData,
-  { prune, seen }: { prune: boolean; seen: Set<string> },
-): GhostlyData {
-  const result: GhostlyData = {};
-  for (const [name, entry] of Object.entries(data)) {
-    if (!prune || seen.has(name)) result[name] = entry;
-  }
-  for (const [name, entry] of Object.entries(measured)) {
-    const remeasured = new Set(Object.keys(entry).map(breakpointPart));
-    const kept = Object.entries(result[name] ?? {}).filter(
-      ([key]) => !remeasured.has(breakpointPart(key)),
-    );
-    result[name] = sortByKey({ ...Object.fromEntries(kept), ...entry });
-  }
-  return sortByKey(result);
-}
-
 const breakpointPart = (key: string) => key.split("@")[0] ?? key;
 
 // "1 ghost", "2 ghosts".
@@ -203,9 +176,6 @@ export async function runMeasure(args: string[]): Promise<void> {
   intro("Measuring every page at every width");
   const options = parseOptions(args);
   const origin = new URL(options.url).origin;
-  // A broken ghostly.json fails now, not after measuring every page.
-  readGhostlyFile(ghostlyFile());
-
   try {
     await fetch(options.url);
   } catch {
@@ -446,15 +416,13 @@ async function measureApp(
     );
   }
 
+  // Built anew from what this run measured: ghosts no page showed anymore
+  // (renamed, deleted) are gone, and nothing old is mixed in.
   const file = ghostlyFile();
-  const before = readGhostlyFile(file);
-  const data = mergeMeasurements(before, measured, {
-    prune: options.prune,
-    seen,
-  });
-  writeGhostlyFile(file, data);
+  const before = Object.keys(readOldGhostlyFile(file));
+  writeGhostlyFile(file, measured);
 
-  const removed = Object.keys(before).filter((name) => !(name in data));
+  const removed = before.filter((name) => !(name in measured));
   if (removed.length > 0) {
     log.success(
       `Removed ${plural(removed.length, "ghost")} no page showed: ` +
