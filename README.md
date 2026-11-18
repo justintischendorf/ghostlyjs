@@ -96,6 +96,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 }
 ```
 
+**Next.js (Pages Router)**: the same around `<Component>` in
+`pages/_app.tsx`.
+
 **Vite and other setups**: around your app, e.g. in `src/main.tsx`.
 
 ```tsx
@@ -166,7 +169,8 @@ breakpoint, and in each window:
 
 Each run builds `ghostly.json` anew: ghosts no page showed anymore
 (renamed, deleted) are gone, and nothing old is mixed in. It only reaches
-pages a link points to, so link every page, e.g. from the footer.
+pages a link points to, so link every page, e.g. from the footer. The
+routes of a hash router (`#/orders`) count as pages too.
 
 For pages behind a login, copy your session cookie from the browser's dev
 tools (Application → Cookies) and pass it with `--cookie`, the only option
@@ -205,6 +209,10 @@ skeleton.
 - **`isLoading`**: `true` shows the skeleton, `false` the children.
 - **Wrap the content itself**, not a component that renders its own
   loading state. The `<Ghost>` measures exactly what it wraps.
+- **One element inside** when the `<Ghost>` sits directly in a grid or
+  flex container. Its children become items of that container (a heading
+  in one column, a paragraph in the next), but the skeleton is a single
+  item. Wrap them in a `<div>`, and the skeleton takes their place.
 
 > [!NOTE]
 > A `<Ghost>` that was never measured shows a single placeholder bar, so the
@@ -360,9 +368,10 @@ in your own CSS:
 #### A `<Ghost>` shows a single grey bar
 
 It was never measured. Run `ghostly measure`. If it reports that the
-`<Ghost>` never showed its content, it loads too slowly (it may stay
-quiet for at most 3 seconds), sits on a page no link points to (link it,
-e.g. from the footer), or needs more than taps (use [`isMeasuring()`](#content-behind-a-tap-with-ismeasuring)).
+`<Ghost>` never showed its content, it loads too slowly (no request runs
+and nothing on the page changes for 3 seconds), sits on a page no link
+points to (link it, e.g. from the footer), or needs more than taps (use
+[`isMeasuring()`](#content-behind-a-tap-with-ismeasuring)).
 
 #### A tap does something it shouldn't, or misses something
 

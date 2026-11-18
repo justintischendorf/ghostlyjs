@@ -10,10 +10,9 @@ export function ghostlyFile(): string {
   return resolve(process.cwd(), "ghostly.json");
 }
 
-// The ghostly.json before, only to report which ghosts are gone. Every
-// run writes the file anew, so a broken one (e.g. merge conflict markers)
-// is simply replaced.
-export function readOldGhostlyFile(file: string): GhostlyData {
+// What ghostly.json holds: nothing yet, its data, or broken (e.g. merge
+// conflict markers), which the app can't import.
+export function readGhostlyFile(file: string): GhostlyData | "broken" {
   if (!existsSync(file)) return {};
   try {
     const data: unknown = JSON.parse(readFileSync(file, "utf8"));
@@ -21,9 +20,9 @@ export function readOldGhostlyFile(file: string): GhostlyData {
       return data as GhostlyData;
     }
   } catch {
-    // Broken: nothing to compare with.
+    // Not JSON.
   }
-  return {};
+  return "broken";
 }
 
 // Sorted by name and breakpoint, so the file only changes where values

@@ -41,18 +41,19 @@ and this project adheres to
   `data-ghostly-skip`. The Next.js and the Vite playground share the same
   components and pages.
 - E2E tests first run `ghostly measure` against both playgrounds (with
-  `--cookie`), then check every page and every state a tap
-  reaches against what it measured: on a phone, and in a desktop window
-  resized from 320 to 1920px, at each breakpoint and at widths inside
-  them. Each state loads once, so the whole run takes a few minutes.
+  `--cookie`), then check every page and every state a tap reaches
+  against what it measured: on a phone, and in a desktop window resized
+  from 320 to 1920px, at each breakpoint and at widths inside them. Each
+  state loads once, so the whole run takes a few minutes.
 
 ### Changed
 
 - `ghostly measure` builds `ghostly.json` anew on every run instead of
   merging into it: ghosts no page showed anymore (renamed, deleted) are
   removed, and no old measurement stays next to the new ones. A broken
-  `ghostly.json` (merge conflict markers) is replaced instead of being an
-  error.
+  `ghostly.json` (merge conflict markers), which the app can't import, is
+  emptied first, so the app loads again, and then measured anew. Before,
+  it was an error.
 - A `<Ghost>` that shows other data on several pages (the header on the
   page of each group) keeps the measurement of the first page measured,
   not of the last. So a new page doesn't change its skeleton.
@@ -67,13 +68,32 @@ and this project adheres to
   `--wait` of `ghostly measure`. It reaches every page a link points to
   and every `<Ghost>` behind a tap on its own, and builds `ghostly.json`
   anew each time, so `--cookie` is the only option left. Link to a page
-  no link pointed to yet, e.g. from the footer.
+  no link pointed to yet, e.g. from the footer. Only apps without an end
+  are stopped: after 1000 pages, and after 500 taps per page and window.
 - `hideClass` from `ghostlyjs/core`. Variants are hidden with
   `fromClass` / `toClass` now, and `variantsOf` returns `from` and `to`
   widths instead of range indexes.
 
 ### Fixed
 
+- A `<Ghost>` that a tap starts loading is waited for, also when it
+  loads without a request and without changing the page (a timer, a
+  cache, a worker). Before, the tap counted as done right away, and a
+  `<Ghost>` behind the last tab or a button in a dialog was never
+  measured.
+- Buttons that a view switch without a URL change removed (tabs that
+  swap the content, a wizard) are tapped too: the page is loaded again
+  to reach them. Before, everything after the switch was never tapped.
+- Checkboxes and radios without text of their own are told apart by
+  their `<label>`. Before, all of them looked the same, and only the
+  first one was tapped.
+- A tap that navigates while the page is read (a form that posts, which
+  is blocked and shows an error page) no longer fails the whole page with
+  "Execution context was destroyed".
+- The routes of a hash router (`#/orders`, `#!/orders`) are measured as
+  pages. Before, their links counted as a place on the same page, and
+  only the start page was measured, without a warning. `#top` still
+  stays on the page.
 - A tap that only changes the query of the URL, like a dialog that keeps
   its state in `?item=3`, is measured on the same page. Before,
   `ghostly measure` measured it as a page of its own and reported the
