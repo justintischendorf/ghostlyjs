@@ -328,7 +328,12 @@ async function measureApp(
   const measured: GhostlyData = {};
   // Every <Ghost> that showed up, measured or not.
   const seen = new Set<string>();
-  const incomplete = new Set<string>();
+  // Breakpoints each <Ghost> was measured at, on any page so far: one
+  // that a page doesn't reach (a menu behind a dialog) may be measured on
+  // another one.
+  const measuredAt = new Map<string, Set<string>>();
+  const fullyMeasured = (name: string) =>
+    ranges.every((range) => measuredAt.get(name)?.has(range.name));
 
   for (const [index, path] of queue.entries()) {
     // One window per range, side by side; the progress shows how many are
@@ -355,8 +360,6 @@ async function measureApp(
     );
 
     const ghosts = new Set<string>();
-    // Breakpoints each <Ghost> of this page was measured at.
-    const measuredAt = new Map<string, Set<string>>();
     let taps = 0;
     const error = visits.find((visit) => visit.error)?.error;
     for (const [step, visit] of visits.entries()) {
@@ -365,7 +368,21 @@ async function measureApp(
       taps = Math.max(taps, visit.taps);
       for (const name of visit.ghosts) ghosts.add(name);
       for (const [name, entry] of visit.measured) {
-        measured[name] = { ...measured[name], ...entry };
+        // The first page that measured a breakpoint keeps it: a <Ghost> on
+        // pages with other data (the header of /groups/1, /groups/2, ...)
+        // keeps the measurement of the first one, also when pages are
+        // added. All keys of a breakpoint ("base", "base@390") from one
+        // page, they belong together.
+        const kept = measured[name] ?? {};
+        const done = new Set(Object.keys(kept).map(breakpointPart));
+        measured[name] = {
+          ...kept,
+          ...Object.fromEntries(
+            Object.entries(entry).filter(
+              ([key]) => !done.has(breakpointPart(key)),
+            ),
+          ),
+        };
         const at = measuredAt.get(name) ?? new Set();
         measuredAt.set(name, at.add(range.name));
       }
@@ -385,15 +402,15 @@ async function measureApp(
       continue;
     }
     for (const name of ghosts) seen.add(name);
-    // Problems of this page, one line per <Ghost>.
+    // Problems of this page, one line per <Ghost> not measured everywhere
+    // yet, on this page or before.
     const problems: string[] = [];
     for (const name of [...ghosts].sort()) {
+      if (fullyMeasured(name)) continue;
       const at = measuredAt.get(name);
       const missing = ranges
         .map((range) => range.name)
         .filter((breakpoint) => !at?.has(breakpoint));
-      if (missing.length === 0) continue;
-      incomplete.add(name);
       problems.push(
         at
           ? `"${name}" not measured at ${missing.join(", ")}`
@@ -444,9 +461,12 @@ async function measureApp(
         removed.map((name) => `"${name}"`).join(", "),
     );
   }
-  if (incomplete.size > 0) {
+  // Counted at the end: a later page may have measured what one before
+  // couldn't reach.
+  const incomplete = [...seen].filter((name) => !fullyMeasured(name));
+  if (incomplete.length > 0) {
     log.warn(
-      `${plural(incomplete.size, "ghost")} not measured everywhere.\n` +
+      `${plural(incomplete.length, "ghost")} not measured everywhere.\n` +
         style(
           "dim",
           "Is their content behind a page no link points to? Add it with --pages.",
@@ -619,10 +639,24 @@ async function visitPage(
 
   // Measures the shown <Ghost>s not measured yet, at every width of the
   // range, and goes back to the first width.
+  // A <Ghost> measured hidden (no space, e.g. in a sidebar hidden below lg)
+  // is measured again once a tap shows it, or one of the same name.
   const measureNew = async (): Promise<void> => {
     const { shown } = await state();
+    const hidden = new Set(
+      [...visit.measured]
+        .filter(([, entry]) => Object.values(entry).every(isEmpty))
+        .map(([name]) => name),
+    );
+    const showing = new Set(
+      hidden.size === 0
+        ? []
+        : (await measureAt(page, [...hidden]))
+            .filter((result) => !isEmpty(result.measurement))
+            .map((result) => result.name),
+    );
     const names = [...new Set(shown)].filter(
-      (name) => !visit.measured.has(name),
+      (name) => !visit.measured.has(name) || showing.has(name),
     );
     if (names.length === 0) return;
     for (const [name, entry] of await sweep(page, names, range)) {
@@ -630,11 +664,16 @@ async function visitPage(
     }
   };
 
+  // Links to pages, not to files (`download`) or to a place on this page
+  // (`#top`): that one resolves to the current URL, also to a query a tap
+  // added (`?item=3#top`), which is no page of its own.
   const collectLinks = async (): Promise<void> => {
     const links = await page.evaluate(() =>
-      [...document.querySelectorAll("a[href]:not([download])")].map(
-        (link) => (link as HTMLAnchorElement).href,
-      ),
+      [
+        ...document.querySelectorAll(
+          'a[href]:not([download]):not([href^="#"])',
+        ),
+      ].map((link) => (link as HTMLAnchorElement).href),
     );
     for (const link of links) visit.links.add(link);
   };
@@ -662,6 +701,10 @@ async function visitPage(
   }
 }
 
+// Content that takes no space: hidden at this width, or nothing at all.
+const isEmpty = ({ width, height }: { width: number; height: number }) =>
+  width === 0 || height === 0;
+
 // Steps (px) between the widths measured first. Where a <Ghost> changes
 // its layout between two of them, the exact width is searched in between.
 const STEP = 8;
@@ -682,8 +725,15 @@ async function sweep(
     await page.setViewportSize({ width, height: WINDOW_HEIGHT });
     const samples = new Map<string, Sample>();
     for (const result of await measureAt(page, only)) {
-      // Two <Ghost>s with the same name: the first one counts.
-      if (samples.has(result.name)) continue;
+      // Two <Ghost>s with the same name: the first shown one counts. One
+      // hidden at this width (the same summary in a sidebar and in a
+      // sheet) takes no space and gives way to the other.
+      const before = samples.get(result.name);
+      if (
+        before &&
+        (!isEmpty(before.measurement) || isEmpty(result.measurement))
+      )
+        continue;
       samples.set(result.name, {
         width,
         measurement: result.measurement,
@@ -823,10 +873,6 @@ async function tapEverything(
   // When each element showed up first: the number of taps before.
   const appeared = new Map<string, number>();
   let taps = 0;
-  const pagePath = (href: string) => {
-    const { pathname, search } = new URL(href);
-    return pathname + search;
-  };
 
   while (taps < options.maxTaps && Date.now() - started < TAP_TIMEOUT) {
     const candidates = await tappable(page);
@@ -877,8 +923,10 @@ async function tapEverything(
       await hooks.settle();
     }
 
-    // The tap went to another page: that one is measured on its own.
-    if (pagePath(page.url()) !== pagePath(url)) {
+    // The tap went to another page: that one is measured on its own. Only
+    // another query (`?item=3`, a dialog or tab that keeps its state in
+    // the URL) is the same page: what it shows is measured right here.
+    if (new URL(page.url()).pathname !== new URL(url).pathname) {
       hooks.navigated(page.url());
       if (await hooks.load()) return;
       continue;

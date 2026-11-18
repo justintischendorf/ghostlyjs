@@ -1,7 +1,7 @@
 "use client";
 
 import { isMeasuring } from "ghostlyjs";
-import { LoaderCircle, CircleCheck } from "lucide-react";
+import { CircleCheck, LoaderCircle } from "lucide-react";
 import {
   createContext,
   useContext,
@@ -11,11 +11,19 @@ import {
 } from "react";
 
 // One loading state for the whole playground, so the toggle in the nav
-// switches every page between content and skeletons.
+// switches every page between content and skeletons. Also the ones in an
+// open dialog, menu or drawer.
 const LoadingContext = createContext({
   isLoading: true,
   toggle: () => {},
 });
+
+declare global {
+  interface Window {
+    // For the e2e tests: switches while a dialog covers the toggle.
+    playground?: { setLoading: (isLoading: boolean) => void };
+  }
+}
 
 export function LoadingProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
@@ -26,6 +34,10 @@ export function LoadingProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- see above
     if (isMeasuring()) setIsLoading(false);
+    window.playground = { setLoading: setIsLoading };
+    return () => {
+      delete window.playground;
+    };
   }, []);
   return (
     <LoadingContext.Provider value={{ isLoading, toggle }}>
@@ -54,7 +66,9 @@ export function LoadingToggle() {
       ) : (
         <CircleCheck className="size-4" />
       )}
-      {isLoading ? "Loading" : "Loaded"}
+      <span className="hidden sm:inline">
+        {isLoading ? "Loading" : "Loaded"}
+      </span>
     </button>
   );
 }

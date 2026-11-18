@@ -1,11 +1,17 @@
 // Compares each skeleton with the content it stands for: the skeleton must
 // sit exactly where the content was, and every box must cover the same
-// part. Runs against both playgrounds (see playwright.config.ts).
+// part. Runs against both playgrounds (see playwright.config.ts), on every
+// page and in every state a tap reaches (tabs, dialogs, menus, sheets).
 //
-// The skeletons come from a fresh measurement, not from `ghostly.json`: in
-// dev mode a <Ghost> measures its content when it is shown and keeps that
-// measurement for its skeleton. So the test checks measuring and drawing,
-// and an outdated `ghostly.json` doesn't make it fail.
+// Two kinds of skeletons are checked:
+// - the stored ones, from the playground's `ghostly.json` as written by
+//   `ghostly measure`. They show when a page loads, before any content was
+//   shown. Checked at each project's width and, in the desktop project, at
+//   widths inside the breakpoints, where they have to follow the window
+//   (`calc()`, container units, the `@` widths of `ghostly.json`). So an
+//   outdated `ghostly.json` fails here: measure the playgrounds again.
+// - the fresh ones: in dev mode a <Ghost> measures its content when it is
+//   shown and draws its skeleton from that measurement afterwards.
 
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -13,8 +19,93 @@ import { fileURLToPath } from "node:url";
 
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
-// /async loads for real and has no toggle; it has its own test below.
-const paths = ["/", "/feed", "/dashboard", "/form", "/layouts", "/edge-cases"];
+// A state of a page to check: its path, and what to tap there first, while
+// the skeletons show. The taps are outside of any <Ghost>, like a tab bar,
+// or in the URL (`?item=3`), so they work before the content is there.
+type Scenario = {
+  path: string;
+  // What is tapped, e.g. "People tab".
+  state?: string;
+  open?: (page: Page) => Promise<void>;
+  // Only where the trigger shows (the summary sheet below lg).
+  maxWidth?: number;
+  // Behind the pretend login of the playgrounds.
+  signedIn?: boolean;
+  // Other content than `ghostly measure` stored, like page 2 of a list:
+  // only the fresh skeletons, measured from this content, must fit it.
+  otherContent?: boolean;
+};
+
+const tab = (name: string) => (page: Page) =>
+  page.getByRole("tab", { name }).click();
+const button = (name: string) => (page: Page) =>
+  page.getByRole("button", { name, exact: true }).click();
+
+const scenarios: Scenario[] = [
+  { path: "/" },
+  { path: "/", state: "People tab", open: tab("People") },
+  { path: "/", state: "notifications", open: button("Notifications") },
+  { path: "/cards" },
+  // The card `ghostly measure` opens: it taps the filters before, the
+  // last one shows the done cards. The dialog shows other names for other
+  // cards, and the skeleton those of card 5.
+  {
+    path: "/cards?item=5",
+    state: "details dialog",
+    // Opens once the page read the URL (in Next.js after a <Suspense>).
+    open: (page) => page.locator("dialog[open]").waitFor(),
+  },
+  // The same <Ghost>s with other cards, and fewer of them.
+  { path: "/cards?page=2", otherContent: true },
+  { path: "/cards?page=3", otherContent: true },
+  {
+    path: "/cards",
+    state: "accordion",
+    open: (page) => page.getByText("A Ghost in a closed accordion").click(),
+  },
+  {
+    path: "/cards",
+    state: "summary sheet",
+    open: (page) => page.getByRole("button", { name: /^Summary/ }).click(),
+    maxWidth: 1023,
+  },
+  { path: "/collections" },
+  {
+    path: "/collections",
+    state: "list view",
+    open: (page) => page.getByRole("radio", { name: "Show as list" }).click(),
+  },
+  {
+    path: "/collections",
+    state: "form dialog",
+    open: button("New collection"),
+  },
+  // The first detail page `ghostly measure` finds; the others show other
+  // names and texts in the same <Ghost>s.
+  { path: "/collections/1" },
+  { path: "/collections/1", state: "people tab", open: tab("People") },
+  { path: "/collections/1", state: "chat tab", open: tab("Chat") },
+  { path: "/collections/1", state: "matrix tab", open: tab("Matrix") },
+  { path: "/charts" },
+  { path: "/account", signedIn: true },
+  {
+    path: "/account",
+    state: "two-factor",
+    open: button("Enable two-factor"),
+    signedIn: true,
+  },
+  { path: "/signin" },
+  { path: "/admin" },
+  { path: "/edge-cases" },
+];
+
+// The widths the desktop window is resized to: the start of each
+// breakpoint range (Tailwind's), where `ghostly measure` measured, and
+// widths inside them, where the stored skeletons follow the window like
+// the content does. The mobile project stays at the phone's width.
+const WIDTHS = [
+  320, 360, 520, 640, 700, 768, 900, 1024, 1150, 1280, 1400, 1536, 1700, 1920,
+];
 
 // Allowed difference in pixels. Measurements are rounded to one decimal,
 // and the skeleton turns some of them into percentages.
@@ -67,13 +158,30 @@ declare global {
       ) => { width: number; height: number; boxes: Box[] };
       measureFrame: (nodes: Node[]) => DOMRect;
     };
+    playground?: { setLoading: (isLoading: boolean) => void };
   }
 }
 
-// The <Ghost count> lists in the playgrounds. Named here, because a list
+// The <Ghost count> lists of the playgrounds: their measurements have a
+// `count`. Both playgrounds have the same <Ghost>s. Named, because a list
 // can look like a normal <Ghost>: in a single column, one skeleton for the
 // whole list would sit right too, but show the wrong number of items.
-const LISTS = new Set(["home-members", "async-client-posts"]);
+const LISTS = new Set(
+  Object.entries(
+    JSON.parse(
+      readFileSync(
+        fileURLToPath(
+          new URL("../../playground-vite/ghostly.json", import.meta.url),
+        ),
+        "utf8",
+      ),
+    ) as Record<string, Record<string, { count?: number }>>,
+  )
+    .filter(([, entry]) =>
+      Object.values(entry).some((measurement) => "count" in measurement),
+    )
+    .map(([name]) => name),
+);
 
 // What <Ghost> renders: a wrapper around shown content, or its skeletons.
 // `data-ghost` holds the name.
@@ -98,20 +206,65 @@ test.afterEach(() => {
   expect(hydrationErrors, "hydration errors").toEqual([]);
 });
 
-for (const path of paths) {
-  test(`skeletons match the content on ${path}`, async ({ page }) => {
-    await page.goto(path);
-    await loadAllFonts(page);
+const titleOf = (scenario: Scenario) =>
+  scenario.path + (scenario.state ? ` (${scenario.state})` : "");
 
-    await toggle(page, "Show content");
-    await page.addScriptTag({ content: measuringScript });
-    const contents = await measureContents(page.locator("body"));
+// Each scenario loads once. The stored skeletons switch with CSS, so they
+// are measured at every width first, while nothing was shown yet; then the
+// content at the same widths. The fresh skeletons right where the content
+// first showed: <Ghost> measures once per breakpoint, and another width of
+// the same breakpoint would measure a bit differently.
+for (const scenario of scenarios) {
+  test(`skeletons match the content on ${titleOf(scenario)}`, async ({
+    page,
+    baseURL,
+    isMobile,
+  }) => {
+    test.setTimeout(120_000);
+    const height = page.viewportSize()?.height ?? 720;
+    const widths = (isMobile ? [page.viewportSize()!.width] : WIDTHS).filter(
+      (width) => width <= (scenario.maxWidth ?? Infinity),
+    );
+    // Taps happen at the first width: there the trigger shows.
+    if (!isMobile) await resize(page, widths[0]!, height);
+    await openScenario(page, baseURL!, scenario);
 
-    await toggle(page, "Show skeletons");
-    const skeletons = await measureSkeletons(page.locator("body"));
+    const stored: Skeleton[][] = [];
+    for (const width of widths) {
+      await resize(page, width, height);
+      stored.push(await measureSkeletons(page.locator("body")));
+    }
 
-    expectSkeletonsMatch(contents, skeletons);
+    await setLoading(page, false);
+    const last = await measureContents(page.locator("body"));
+    await setLoading(page, true);
+    const fresh = await measureSkeletons(page.locator("body"));
+    expectSkeletonsMatch(last, fresh, `fresh at ${widths.at(-1)}px`);
+
+    if (scenario.otherContent) return;
+    await setLoading(page, false);
+    for (const [index, width] of widths.entries()) {
+      await resize(page, width, height);
+      const contents = await measureContents(page.locator("body"));
+      expectSkeletonsMatch(contents, stored[index]!, `stored at ${width}px`);
+    }
   });
+}
+
+// A new window width, laid out: two frames, for what an effect changed.
+// Scrolled to the top, so sticky sidebars sit in the same place in both
+// phases (a tap scrolls).
+async function resize(page: Page, width: number, height: number) {
+  if (page.viewportSize()?.width !== width) {
+    await page.setViewportSize({ width, height });
+  }
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.evaluate(
+    () =>
+      new Promise((done) =>
+        requestAnimationFrame(() => requestAnimationFrame(done)),
+      ),
+  );
 }
 
 // The skeleton switches with CSS when the window gets narrower or wider:
@@ -120,19 +273,21 @@ for (const path of paths) {
 test("skeletons switch with the window width", async ({ page, isMobile }) => {
   test.skip(isMobile, "resizes the window itself");
   const desktop = page.viewportSize() ?? { width: 1280, height: 720 };
-  // /feed: the sidebar moves below the posts on narrow windows.
-  await page.goto("/feed");
+  // The dashboard: the sidebar moves below the main column on narrow
+  // windows.
+  await page.goto("/");
   await loadAllFonts(page);
   await page.addScriptTag({ content: measuringScript });
 
-  await toggle(page, "Show content");
+  await setLoading(page, false);
   const contents = await measureContents(page.locator("body"));
-  await toggle(page, "Show skeletons");
+  await setLoading(page, true);
 
-  // Measure the phone layout too: now each Ghost has two variants.
+  // Measure the phone layout too: now each Ghost has fresh measurements
+  // for both widths, and a variant for each.
   await page.setViewportSize({ width: 390, height: 844 });
-  await toggle(page, "Show content");
-  await toggle(page, "Show skeletons");
+  await setLoading(page, false);
+  await setLoading(page, true);
   expect(
     await page.locator(".ghostly-skeleton").count(),
     "both variants are in the page",
@@ -140,7 +295,11 @@ test("skeletons switch with the window width", async ({ page, isMobile }) => {
 
   await page.setViewportSize(desktop);
   await page.evaluate(() => window.scrollTo(0, 0));
-  expectSkeletonsMatch(contents, await measureSkeletons(page.locator("body")));
+  expectSkeletonsMatch(
+    contents,
+    await measureSkeletons(page.locator("body")),
+    "after resizing",
+  );
 });
 
 // /async loads for real instead of using the toggle.
@@ -150,7 +309,7 @@ test("skeletons on /async show while loading and match the content", async ({
   // `commit`: check before the page finished loading, while the data is
   // still on its way.
   await page.goto("/async", { waitUntil: "commit" });
-  const skeletons = page.locator(SKELETON);
+  const skeletons = page.locator("main").locator(SKELETON);
   await expect(
     page
       .locator(".ghostly-skeleton:visible, .ghostly-placeholder:visible")
@@ -164,8 +323,8 @@ test("skeletons on /async show while loading and match the content", async ({
     page.getByText(/Loaded (on the server|in the browser)/),
   ).toBeVisible();
 
-  // The posts that load in useEffect (a <Ghost count>): "Load again" shows
-  // their skeletons, drawn from the measurement taken when they arrived.
+  // The activity that loads in useEffect (a <Ghost count>): "Load again"
+  // shows its skeletons, drawn from the measurement taken when it arrived.
   const posts = page.locator("section").filter({ hasText: "useEffect" });
   await page.addScriptTag({ content: measuringScript });
   const contents = await measureContents(posts);
@@ -173,8 +332,79 @@ test("skeletons on /async show while loading and match the content", async ({
   await expect(posts.locator(".ghostly-skeleton:visible")).toHaveCount(
     contents[0]?.items.length ?? 0,
   );
-  expectSkeletonsMatch(contents, await measureSkeletons(posts));
+  expectSkeletonsMatch(contents, await measureSkeletons(posts), "fresh");
 });
+
+// `ghostly measure` never taps what is marked with `data-ghostly-skip`, and
+// the playground's skipped <Ghost> really only shows after a tap there.
+test("the skipped subscription part hides a <Ghost>", async ({
+  page,
+  baseURL,
+}) => {
+  test.skip(
+    !test.info().project.name.endsWith("desktop"),
+    "once per playground",
+  );
+  await openScenario(page, baseURL!, { path: "/account", signedIn: true });
+  await setLoading(page, false);
+  await page.getByRole("button", { name: "Cancel subscription" }).click();
+  await expect(page.locator('[data-ghost="account-cancelled"]')).toHaveCount(1);
+});
+
+// Without the pretend login, the account page sends you to /signin.
+test("the account page needs the session cookie", async ({ page }) => {
+  await page.goto("/account");
+  await expect(page).toHaveURL(/\/signin$/);
+});
+
+// Opens the page of the scenario with its skeletons (nothing was shown
+// yet, so they come from `ghostly.json`) and taps what it needs.
+async function openScenario(page: Page, baseURL: string, scenario: Scenario) {
+  if (scenario.signedIn) {
+    await page
+      .context()
+      .addCookies([{ name: "session", value: "playground", url: baseURL }]);
+  }
+  await page.goto(scenario.path);
+  await page.waitForLoadState("networkidle");
+  await loadAllFonts(page);
+  await scenario.open?.(page);
+  await imagesLoaded(page);
+  await page.addScriptTag({ content: measuringScript });
+}
+
+// Switches every <Ghost> between content and skeletons. Through the
+// playground's hook, because an open dialog covers the toggle in the nav.
+async function setLoading(page: Page, isLoading: boolean) {
+  await page.waitForFunction(() => !!window.playground);
+  await page.evaluate(
+    (value) => window.playground!.setLoading(value),
+    isLoading,
+  );
+  // The toggle's other label shows once React rendered the switch.
+  await expect(
+    page.locator(
+      `button[aria-label="${isLoading ? "Show content" : "Show skeletons"}"]`,
+    ),
+  ).toHaveCount(1);
+  await imagesLoaded(page);
+  await loadAllFonts(page);
+  // Two frames: layout, then what an effect changed after it.
+  await page.evaluate(
+    () =>
+      new Promise((done) =>
+        requestAnimationFrame(() => requestAnimationFrame(done)),
+      ),
+  );
+}
+
+// Images (e.g. the covers) change the layout once loaded. Not
+// `networkidle`: an <iframe srcdoc> added later keeps it from coming back.
+async function imagesLoaded(page: Page) {
+  await page.waitForFunction(() =>
+    [...document.images].every((image) => image.complete),
+  );
+}
 
 // Load every font first. The browser loads a font only once text uses it,
 // and the skeletons show no text. So a font like the mono one would arrive
@@ -189,39 +419,66 @@ async function loadAllFonts(page: Page) {
   });
 }
 
-// Each skeleton must sit where its content was, box by box.
-function expectSkeletonsMatch(contents: Content[], skeletons: Skeleton[]) {
+// Each skeleton must sit where its content was, box by box. `kind` names
+// the skeletons in the messages ("stored", "fresh").
+// Content that takes no space (hidden at this width, like the summary's
+// sidebar on phones, or nothing at all) isn't drawn, and neither is its
+// skeleton: both are left out. A skeleton of no size for content that has
+// one is still missing then.
+function expectSkeletonsMatch(
+  allContents: Content[],
+  allSkeletons: Skeleton[],
+  kind: string,
+) {
+  const hasSize = (rect: Rect) => rect.width > 0 && rect.height > 0;
+  const contents = allContents.filter((content) => hasSize(content.whole));
+  const skeletons = allSkeletons.filter(
+    (skeleton) => !skeleton.frame || hasSize(skeleton.frame),
+  );
   // Every page has Ghosts; none found means the selector broke, and the
   // checks below would pass without checking anything.
-  expect(contents.length).toBeGreaterThan(0);
+  // (Hidden ones count: /signin's only one is hidden below lg.)
+  expect(allContents.length).toBeGreaterThan(0);
   // A list measured as items needs more than one, or the item checks below
   // would check nothing.
   for (const content of contents) {
     if (LISTS.has(content.name))
-      expect(content.items.length).toBeGreaterThan(1);
+      expect(content.items.length, content.name).toBeGreaterThan(1);
   }
 
+  // Two <Ghost>s with the same name: the skeletons in the same order.
+  const used = new Map<string, number>();
   for (const content of contents) {
-    const label = `Ghost "${content.name}" ("${content.label}")`;
+    const label = `${kind} skeleton of "${content.name}" ("${content.label}")`;
     const own = skeletons.filter((skeleton) => skeleton.name === content.name);
     const frames = own.flatMap((skeleton) =>
       skeleton.frame ? [skeleton.frame] : [],
     );
-    // Shown before, so it was measured: no placeholder.
+    // Measured, so no placeholder.
     expect.soft(frames.length, `${label}: skeletons`).toBe(own.length);
+
+    // A normal <Ghost>: one skeleton for all of its content.
+    if (!LISTS.has(content.name)) {
+      const index = used.get(content.name) ?? 0;
+      used.set(content.name, index + 1);
+      const twins = contents.filter((item) => item.name === content.name);
+      expect
+        .soft(frames.length, `${label}: number of skeletons`)
+        .toBe(twins.length);
+      const frame = frames[index];
+      if (!frame) {
+        expect.soft(frame, `${label}: skeleton missing`).toBeDefined();
+        continue;
+      }
+      expectFrameMatch(frame, content.whole, label);
+      continue;
+    }
+
     const [first] = frames;
     if (!first) {
       expect.soft(first, `${label}: skeleton missing`).toBeDefined();
       continue;
     }
-
-    // A normal <Ghost>: one skeleton for all of its content.
-    if (!LISTS.has(content.name)) {
-      expect.soft(frames.length, `${label}: number of skeletons`).toBe(1);
-      expectFrameMatch(first, content.whole, label);
-      continue;
-    }
-
     // A list: the first skeleton is the first item, box by box. In the
     // playgrounds `count` matches the number of items.
     expectFrameMatch(first, content.firstItem, `${label} (first item)`);
@@ -264,15 +521,6 @@ function expectFrameMatch(skeleton: Frame, content: Frame, label: string) {
   }
 }
 
-async function toggle(page: Page, label: string) {
-  await page.getByRole("button", { name: label }).click();
-  // The other label shows once React rendered the switch.
-  const other = label === "Show content" ? "Show skeletons" : "Show content";
-  await expect(page.getByRole("button", { name: other })).toBeVisible();
-  // Images (e.g. the cover in the feed) change the layout once loaded.
-  await page.waitForLoadState("networkidle");
-}
-
 // For each top-level <Ghost> inside `scope` that shows its content: the
 // content measured by `ghostlyjs/core`, in page coordinates (the page may
 // scroll between the two measurings, e.g. to click a button).
@@ -284,6 +532,11 @@ function measureContents(scope: Locator): Promise<Content[]> {
         // Nested <Ghost>s belong to the skeleton of the outer one.
         !element.parentElement?.closest("[data-ghost]"),
     );
+    // Hidden content (in a closed <details>, `hidden lg:block`) counts as
+    // taking no space. Plain text has no element to check.
+    const isVisible = (element: Element) =>
+      element.children.length === 0 ||
+      [...element.children].some((child) => child.checkVisibility());
     const { measureElement, measureFrame } = window.ghostlyTest;
     const toPage = (rect: DOMRect) => ({
       x: rect.x + scrollX,
@@ -306,10 +559,11 @@ function measureContents(scope: Locator): Promise<Content[]> {
 
     return wrappers.map((element) => {
       const items = [...element.children];
+      const whole = measure(element, [...element.childNodes], false);
       return {
         name: element.getAttribute("data-ghost") ?? "",
         label: (element.textContent ?? "").trim().slice(0, 30),
-        whole: measure(element, [...element.childNodes], false),
+        whole: isVisible(element) ? whole : { ...whole, width: 0, height: 0 },
         firstItem: measure(element, items.slice(0, 1), true),
         items: items.map((item) => toPage(item.getBoundingClientRect())),
       };
@@ -318,12 +572,13 @@ function measureContents(scope: Locator): Promise<Content[]> {
 }
 
 // The drawn skeletons inside `scope` and their boxes, in page coordinates.
-// Only the shown ones: CSS hides the variants of other window widths.
+// Only the shown ones: CSS hides the variants of other window widths, and
+// a closed <details> what is inside.
 function measureSkeletons(scope: Locator): Promise<Skeleton[]> {
   return scope.evaluate(
     (root, selector) =>
       [...root.querySelectorAll(selector)]
-        .filter((element) => element.getClientRects().length > 0)
+        .filter((element) => element.checkVisibility())
         .map((element) => {
           const name = element.getAttribute("data-ghost") ?? "";
           if (!element.matches(".ghostly-skeleton"))

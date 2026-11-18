@@ -1,3 +1,4 @@
+import Footer from "@/components/footer";
 import { LoadingProvider } from "@/components/loading";
 import Nav from "@/components/nav";
 import { GhostlyProvider } from "ghostlyjs";
@@ -19,7 +20,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Playground for Ghostly",
+  title: "Playground for Ghostly (Next.js)",
   description:
     "A playground for the Ghostly library, demonstrating its usage in a Next.js application.",
   // The repo logo as favicon.
@@ -35,12 +36,14 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="flex min-h-full flex-col">
         <GhostlyProvider data={data}>
           <LoadingProvider>
+            <div id="top" />
             <Nav />
             {/* Full width up to 2xl with more padding per breakpoint, so
                 the content is narrower or wider at every breakpoint. */}
-            <main className="mx-auto flex w-full max-w-384 flex-col gap-10 px-4 py-8 sm:px-6 sm:py-10 md:gap-12 md:px-8 lg:py-14 xl:px-10 2xl:px-12">
+            <main className="mx-auto flex w-full max-w-384 flex-1 flex-col gap-10 px-4 py-8 sm:px-6 sm:py-10 md:gap-12 md:px-8 lg:py-14 xl:px-10 2xl:px-12">
               {children}
             </main>
+            <Footer />
           </LoadingProvider>
         </GhostlyProvider>
       </body>

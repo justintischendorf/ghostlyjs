@@ -31,6 +31,28 @@ and this project adheres to
 - The windows of one page run side by side, each with its own browser
   profile, so what a tap stores (a theme, a collapsed sidebar) doesn't
   change the other measurements.
+- New playgrounds: test pages that show `ghostly measure` getting every
+  kind of layout and tap right. Each part names the case it tests. An
+  overview with a sidebar, cards on three pages with other content each,
+  filters and a summary that is a sidebar or a sheet, collections as a
+  grid or a list and a detail page per collection, charts, account
+  settings behind a pretend login, a sign-in page, an admin page no link
+  points to, real async loading and over 40 edge cases. It has tabs,
+  menus, popovers, dialogs (one opens by its URL, `?item=5`), an
+  accordion, buttons that log out or write, and a part marked
+  `data-ghostly-skip`. The Next.js and the Vite playground share the same
+  components and pages.
+- E2E tests first run `ghostly measure` against both playgrounds (with
+  `--pages` and `--cookie`), then check every page and every state a tap
+  reaches against what it measured: on a phone, and in a desktop window
+  resized from 320 to 1920px, at each breakpoint and at widths inside
+  them. Each state loads once, so the whole run takes a few minutes.
+
+### Changed
+
+- A `<Ghost>` that shows other data on several pages (the header on the
+  page of each group) keeps the measurement of the first page measured,
+  not of the last. So a new page doesn't change its skeleton.
 
 ### Removed
 
@@ -44,6 +66,22 @@ and this project adheres to
 
 ### Fixed
 
+- A tap that only changes the query of the URL, like a dialog that keeps
+  its state in `?item=3`, is measured on the same page. Before,
+  `ghostly measure` measured it as a page of its own and reported the
+  dialog's `<Ghost>` as never shown on the page it opened from.
+- Links to a place on the same page (`#top`) are no longer measured as
+  pages. After a tap that added a query, they counted as a page of their
+  own.
+- "Not measured everywhere" no longer counts a `<Ghost>` another page
+  measured, like one in a menu that a dialog covers on one page.
+- A `<Ghost>` that is hidden at a width (a sidebar below `lg`) and shows
+  under the same name elsewhere after a tap (the same summary in a sheet)
+  is measured where it shows. Before, the hidden one was measured with no
+  size, and its skeleton was missing in the sheet.
+- Text that fills its line at one width and keeps its width after that
+  (a plain sentence that just fits) no longer stretches its skeleton to the
+  full width of a wider parent.
 - Skeletons of content that fills its parent (cards, tables, headings in a
   block) fill it too, also when it is wider than when measured. Before,
   they kept the measured width, so on a phone wider than the measured

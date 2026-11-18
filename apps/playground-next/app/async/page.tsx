@@ -1,7 +1,7 @@
 // A server component: the data really loads, the toggle in the nav has no
 // effect here. Reload the page to see the skeletons again.
 
-import { posts } from "@/lib/data";
+import { activities, me } from "@/lib/data";
 import { Ghost } from "ghostlyjs";
 import { connection } from "next/server";
 import { Suspense } from "react";
@@ -50,7 +50,7 @@ async function SlowProfile() {
   // Wait for a request, then pretend to fetch for 2 seconds.
   await connection();
   await new Promise((resolve) => setTimeout(resolve, 2000));
-  const post = posts[0];
+  const activity = activities[2]!;
 
   return (
     <Ghost name="async-server" isLoading={false}>
@@ -59,11 +59,11 @@ async function SlowProfile() {
         <div className="flex shrink-0 items-center gap-3">
           <div className="size-12 shrink-0 rounded-full bg-accent" />
           <div>
-            <p className="font-semibold">{post.author}</p>
+            <p className="font-semibold">{me.name}</p>
             <p className="text-sm text-muted">Loaded on the server</p>
           </div>
         </div>
-        <p className="xl:text-lg">{post.text}</p>
+        <p className="xl:text-lg">{activity.text}</p>
       </div>
     </Ghost>
   );
