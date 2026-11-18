@@ -164,17 +164,13 @@ breakpoint, and in each window:
    other, and measures each `<Ghost>` that only shows up then. Links it
    finds, also in opened menus, are measured as pages of their own.
 
-| Option                | Default | What it does                                                                                |
-| --------------------- | ------- | ------------------------------------------------------------------------------------------- |
-| `--pages /a,/b`       |         | Also measures pages no link points to.                                                      |
-| `--prune`             | off     | Removes ghosts no page showed, e.g. renamed or deleted ones.                                |
-| `--max-pages <n>`     | `50`    | Follows links to at most `n` pages.                                                         |
-| `--max-taps <n>`      | `100`   | Taps at most `n` elements per page and breakpoint. `0` taps nothing.                        |
-| `--wait <ms>`         | `3000`  | How long a page may stay quiet before a `<Ghost>` that still loads counts as never loading. |
-| `--cookie name=value` |         | Sends a cookie with every page, e.g. your login session. Repeat it for more cookies.        |
+Each run builds `ghostly.json` anew: ghosts no page showed anymore
+(renamed, deleted) are gone, and nothing old is mixed in. It only reaches
+pages a link points to, so link every page, e.g. from the footer.
 
 For pages behind a login, copy your session cookie from the browser's dev
-tools (Application → Cookies) and pass it with `--cookie`:
+tools (Application → Cookies) and pass it with `--cookie`, the only option
+of `ghostly measure` (repeat it for more cookies):
 
 ```bash
 npx ghostly measure http://localhost:3000 --cookie "session=..."
@@ -189,7 +185,7 @@ npx ghostly measure http://localhost:3000 --cookie "session=..."
 > is tapped.
 
 Reload the page: while `isLoading` is `true`, each `<Ghost>` shows its
-skeleton. `npx ghostly --help` lists all options.
+skeleton.
 
 <img src="https://raw.githubusercontent.com/justintischendorf/ghostlyjs/main/assets/divider.svg" width="100%" alt="" />
 
@@ -364,9 +360,9 @@ in your own CSS:
 #### A `<Ghost>` shows a single grey bar
 
 It was never measured. Run `ghostly measure`. If it reports that the
-`<Ghost>` never showed its content, it loads too slowly (raise `--wait`),
-sits on a page no link points to (add it with `--pages`), or needs more
-than taps (use [`isMeasuring()`](#content-behind-a-tap-with-ismeasuring)).
+`<Ghost>` never showed its content, it loads too slowly (it may stay
+quiet for at most 3 seconds), sits on a page no link points to (link it,
+e.g. from the footer), or needs more than taps (use [`isMeasuring()`](#content-behind-a-tap-with-ismeasuring)).
 
 #### A tap does something it shouldn't, or misses something
 
@@ -377,7 +373,7 @@ page and window width. Mark elements it should leave alone with
 #### "`ghostly dev` was removed"
 
 Since 0.3.0, `ghostly measure` taps every button itself and reaches what
-`ghostly dev` was needed for. Run `ghostly measure --prune` once to measure
+`ghostly dev` was needed for. Run `ghostly measure` once to measure
 everything the new way.
 
 #### "This is a production build"
@@ -394,10 +390,10 @@ a browser for it once (about 200 MB):
 npx playwright-core install chromium-headless-shell
 ```
 
-#### "ghostly.json is broken"
+#### `ghostly.json` has a merge conflict
 
-Usually a merge conflict. Fix the file, or delete it, create an empty one
-(`{}`) and measure again.
+Your app can't import it then. Run `ghostly measure` again: it replaces
+the file.
 
 #### The skeleton doesn't match after a design change
 

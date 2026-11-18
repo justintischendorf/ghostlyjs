@@ -19,13 +19,6 @@ const USAGE = `${style("bold", "Usage")}
                            every button, menu and tab
 
 ${style("bold", "Options of measure")}
-  --pages /a,/b            pages no link points to
-  --prune                  remove ghosts from ghostly.json that no page showed
-  --max-pages <n>          follow links to at most n pages (default 50)
-  --max-taps <n>           tap at most n elements per page and width
-                           (default 100, 0 for none)
-  --wait <ms>              how long a page may stay quiet before a <Ghost>
-                           counts as never loading (default 3000)
   --cookie name=value      send a cookie with every page, e.g. a login
                            session (repeat for more cookies)
 

@@ -2,8 +2,8 @@
 
 import { Link } from "@/lib/navigation";
 
-// Links of every kind: pages, a page no other link points to (/signin is
-// only linked here), another site, an e-mail address, a file download and
+// Links of every kind: pages, pages no other link points to (/signin and
+// /admin are only linked here), another site, an e-mail address, a file download and
 // a jump to the top of the same page. A client component, because
 // lib/navigation has the router's hooks too.
 export default function Footer() {
@@ -23,6 +23,7 @@ export default function Footer() {
           <Link href="/cards">Cards</Link>
           <Link href="/collections">Collections</Link>
           <Link href="/signin">Sign in</Link>
+          <Link href="/admin">Admin</Link>
           <a
             href="https://github.com/justintischendorf/ghostlyjs"
             target="_blank"
