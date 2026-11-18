@@ -11,9 +11,15 @@ const playgrounds = [
 export default defineConfig({
   testDir: "tests",
   fullyParallel: true,
+  // The runners have 4 cores; the default would use 2.
+  workers: isCI ? 4 : undefined,
   forbidOnly: isCI,
   reporter: isCI ? [["github"], ["html", { open: "never" }]] : "list",
   use: {
+    // The browser `ghostly measure` opens: the installed Chrome. Text is a
+    // bit wider or narrower in Playwright's own Chromium on Linux, so the
+    // stored skeletons would not fit there.
+    channel: "chrome",
     trace: "retain-on-failure",
     // No pulse animation on the skeletons.
     reducedMotion: "reduce",
