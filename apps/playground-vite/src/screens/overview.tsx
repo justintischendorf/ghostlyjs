@@ -156,8 +156,14 @@ export default function Overview() {
                     className="flex flex-col items-center gap-2 rounded-2xl border border-border p-4 text-center"
                   >
                     <Avatar member={person} size="lg" />
-                    <p className="text-sm font-medium">{person.name}</p>
-                    <p className="text-xs text-muted">{person.role}</p>
+                    {/* One line each: every card as high as the first, like the
+                        skeletons that repeat it */}
+                    <p className="max-w-full truncate text-sm font-medium">
+                      {person.name}
+                    </p>
+                    <p className="max-w-full truncate text-xs text-muted">
+                      {person.role}
+                    </p>
                   </div>
                 ))}
               </Ghost>

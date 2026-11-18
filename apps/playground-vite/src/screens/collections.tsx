@@ -132,7 +132,7 @@ export default function Collections() {
       >
         {view === "grid" ? (
           <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-            <Ghost name="collections-grid" isLoading={isLoading} count={4}>
+            <Ghost name="collections-grid" isLoading={isLoading} count={3}>
               {shown.map((item) => (
                 <CollectionCard key={item.id} item={item} />
               ))}
@@ -140,7 +140,7 @@ export default function Collections() {
           </ul>
         ) : (
           <ul className="flex flex-col gap-2">
-            <Ghost name="collections-rows" isLoading={isLoading} count={4}>
+            <Ghost name="collections-rows" isLoading={isLoading} count={3}>
               {shown.map((item) => (
                 <CollectionRow key={item.id} item={item} />
               ))}

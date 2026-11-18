@@ -1,12 +1,13 @@
 // Runs `ghostly measure` against the playground of the project (see
 // playwright.config.ts), like a user would, and checks the ghostly.json it
-// writes. The command taps every button, so it reaches every <Ghost>, also
-// the ones that only show after a tap: in tabs, menus, dialogs, a sheet and
-// an accordion, and in a dialog that opens by its URL (`?item=5`).
+// writes into the playground. The other tests run after it, against what
+// it measured on this machine. The command taps every button, so it
+// reaches every <Ghost>, also the ones that only show after a tap: in
+// tabs, menus, dialogs, a sheet and an accordion, and in a dialog that
+// opens by its URL (`?item=5`).
 
 import { spawn } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -16,18 +17,6 @@ const cli = join(
   dirname(fileURLToPath(import.meta.resolve("ghostlyjs/package.json"))),
   "dist/cli/index.js",
 );
-
-// The <Ghost>s of the playgrounds (both have the same pages).
-const playgroundGhosts = Object.keys(
-  JSON.parse(
-    readFileSync(
-      fileURLToPath(
-        new URL("../../playground-vite/ghostly.json", import.meta.url),
-      ),
-      "utf8",
-    ),
-  ),
-).sort();
 
 const BREAKPOINTS = ["2xl", "base", "lg", "md", "sm", "xl"];
 
@@ -56,12 +45,20 @@ const TAPPED = [
 test("ghostly measure measures every page at every breakpoint", async ({
   baseURL,
 }, testInfo) => {
-  // The command opens its own browser and windows; once per playground.
-  test.skip(!testInfo.project.name.endsWith("desktop"), "once per playground");
   test.setTimeout(900_000);
-
-  const folder = mkdtempSync(join(tmpdir(), "ghostly-e2e-"));
-  try {
+  // "vite-measure": the folder of the Vite playground.
+  const folder = fileURLToPath(
+    new URL(
+      `../../playground-${testInfo.project.name.split("-")[0]}/`,
+      import.meta.url,
+    ),
+  );
+  const file = join(folder, "ghostly.json");
+  // The <Ghost>s of the playground, as committed.
+  const playgroundGhosts = Object.keys(
+    JSON.parse(readFileSync(file, "utf8")),
+  ).sort();
+  {
     const child = spawn(
       process.execPath,
       [
@@ -74,6 +71,8 @@ test("ghostly measure measures every page at every breakpoint", async ({
         // The pretend login of the account page.
         "--cookie",
         "session=playground",
+        // Ghosts the playground no longer has are removed.
+        "--prune",
       ],
       { cwd: folder },
     );
@@ -83,7 +82,7 @@ test("ghostly measure measures every page at every breakpoint", async ({
     const code = await new Promise((done) => child.once("exit", done));
     expect(code, output).toBe(0);
 
-    const data = JSON.parse(readFileSync(join(folder, "ghostly.json"), "utf8"));
+    const data = JSON.parse(readFileSync(file, "utf8"));
     expect(Object.keys(data)).toEqual(playgroundGhosts);
     for (const name of TAPPED) expect(data, name).toHaveProperty(name);
     // Every breakpoint, plus widths inside one where the layout changes
@@ -120,7 +119,7 @@ test("ghostly measure measures every page at every breakpoint", async ({
     // one not measured everywhere.
     expect(output).toContain('"edge-never-measured" never showed its content');
     expect(output).toContain("1 ghost not measured everywhere");
-  } finally {
-    rmSync(folder, { recursive: true, force: true });
   }
+  // The dev server picks up the new ghostly.json before the other tests.
+  await new Promise((done) => setTimeout(done, 2000));
 });

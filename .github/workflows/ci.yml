@@ -15,8 +15,7 @@ jobs:
   ci:
     name: CI
     runs-on: ubuntu-latest
-    # `ghostly measure` against both playgrounds alone takes several minutes.
-    timeout-minutes: 45
+    timeout-minutes: 20
 
     steps:
       - name: Check out code

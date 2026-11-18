@@ -42,10 +42,11 @@ and this project adheres to
   accordion, buttons that log out or write, and a part marked
   `data-ghostly-skip`. The Next.js and the Vite playground share the same
   components and pages.
-- E2E tests check every page and every state a tap reaches, also the
-  skeletons from the measured `ghostly.json`: at each breakpoint and at
-  widths inside them, from 360 to 1920px. `ghostly measure` runs against
-  both playgrounds with `--pages` and `--cookie`.
+- E2E tests first run `ghostly measure` against both playgrounds (with
+  `--pages` and `--cookie`), then check every page and every state a tap
+  reaches against what it measured: on a phone, and in a desktop window
+  resized from 320 to 1920px, at each breakpoint and at widths inside
+  them. Each state loads once, so the whole run takes a few minutes.
 
 ### Changed
 

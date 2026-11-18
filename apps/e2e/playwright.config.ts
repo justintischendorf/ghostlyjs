@@ -8,24 +8,6 @@ const playgrounds = [
   { name: "next", port: 3000, cwd: "../playground-next" },
 ];
 
-// A window in every breakpoint range (Tailwind's), at its smallest width
-// like `ghostly measure`: the playgrounds change their layout at each one.
-// `base` is a real phone (touch, device pixel ratio), the others desktop.
-const desktop = devices["Desktop Chrome"];
-const atWidth = (width: number) => ({
-  ...desktop,
-  viewport: { ...desktop.viewport, width },
-});
-const screens = [
-  { name: "mobile", device: devices["Pixel 7"] },
-  { name: "sm", device: atWidth(640) },
-  { name: "md", device: atWidth(768) },
-  { name: "lg", device: atWidth(1024) },
-  // Desktop Chrome is 1280 wide.
-  { name: "desktop", device: desktop },
-  { name: "2xl", device: atWidth(1536) },
-];
-
 export default defineConfig({
   testDir: "tests",
   fullyParallel: true,
@@ -36,15 +18,30 @@ export default defineConfig({
     // No pulse animation on the skeletons.
     reducedMotion: "reduce",
   },
-  projects: playgrounds.flatMap((playground) =>
-    screens.map((screen) => ({
-      name: `${playground.name}-${screen.name}`,
-      use: {
-        ...screen.device,
-        baseURL: `http://localhost:${playground.port}`,
+  // Per playground: first `ghostly measure` writes its ghostly.json, on
+  // this machine (text wraps a bit differently per OS). Then the checks:
+  // on a real phone (touch, device pixel ratio), and in a desktop window
+  // that the tests resize to every breakpoint.
+  projects: playgrounds.flatMap((playground) => {
+    const baseURL = `http://localhost:${playground.port}`;
+    const measure = `${playground.name}-measure`;
+    return [
+      {
+        name: measure,
+        testMatch: "measure.spec.ts",
+        use: { ...devices["Desktop Chrome"], baseURL },
       },
-    })),
-  ),
+      ...[
+        { name: "mobile", device: devices["Pixel 7"] },
+        { name: "desktop", device: devices["Desktop Chrome"] },
+      ].map((screen) => ({
+        name: `${playground.name}-${screen.name}`,
+        testIgnore: "measure.spec.ts",
+        dependencies: [measure],
+        use: { ...screen.device, baseURL },
+      })),
+    ];
+  }),
   webServer: playgrounds.map((playground) => ({
     command: `bun run dev --port ${playground.port}`,
     cwd: playground.cwd,

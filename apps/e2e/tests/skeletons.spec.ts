@@ -99,9 +99,13 @@ const scenarios: Scenario[] = [
   { path: "/edge-cases" },
 ];
 
-// Widths inside the breakpoints (Tailwind's), checked in the desktop
-// project: phones of every size, tablets and wide windows.
-const WIDTHS = [360, 430, 520, 700, 900, 1150, 1400, 1700, 1920];
+// The widths the desktop window is resized to: the start of each
+// breakpoint range (Tailwind's), where `ghostly measure` measured, and
+// widths inside them, where the stored skeletons follow the window like
+// the content does. The mobile project stays at the phone's width.
+const WIDTHS = [
+  320, 360, 520, 640, 700, 768, 900, 1024, 1150, 1280, 1400, 1536, 1700, 1920,
+];
 
 // Allowed difference in pixels. Measurements are rounded to one decimal,
 // and the skeleton turns some of them into percentages.
@@ -205,53 +209,63 @@ test.afterEach(() => {
 const titleOf = (scenario: Scenario) =>
   scenario.path + (scenario.state ? ` (${scenario.state})` : "");
 
-// At the width of each project: the stored skeletons, then the fresh ones.
+// Each scenario loads once. The stored skeletons switch with CSS, so they
+// are measured at every width first, while nothing was shown yet; then the
+// content at the same widths. The fresh skeletons right where the content
+// first showed: <Ghost> measures once per breakpoint, and another width of
+// the same breakpoint would measure a bit differently.
 for (const scenario of scenarios) {
   test(`skeletons match the content on ${titleOf(scenario)}`, async ({
     page,
     baseURL,
+    isMobile,
   }) => {
-    const width = page.viewportSize()?.width ?? 0;
-    test.skip(
-      width > (scenario.maxWidth ?? Infinity),
-      "not shown at this width",
+    test.setTimeout(120_000);
+    const height = page.viewportSize()?.height ?? 720;
+    const widths = (isMobile ? [page.viewportSize()!.width] : WIDTHS).filter(
+      (width) => width <= (scenario.maxWidth ?? Infinity),
     );
+    // Taps happen at the first width: there the trigger shows.
+    if (!isMobile) await resize(page, widths[0]!, height);
     await openScenario(page, baseURL!, scenario);
-    const stored = await measureSkeletons(page.locator("body"));
+
+    const stored: Skeleton[][] = [];
+    for (const width of widths) {
+      await resize(page, width, height);
+      stored.push(await measureSkeletons(page.locator("body")));
+    }
 
     await setLoading(page, false);
-    const contents = await measureContents(page.locator("body"));
-    if (!scenario.otherContent)
-      expectSkeletonsMatch(contents, stored, "stored");
-
+    const last = await measureContents(page.locator("body"));
     await setLoading(page, true);
     const fresh = await measureSkeletons(page.locator("body"));
-    expectSkeletonsMatch(contents, fresh, "fresh");
+    expectSkeletonsMatch(last, fresh, `fresh at ${widths.at(-1)}px`);
+
+    if (scenario.otherContent) return;
+    await setLoading(page, false);
+    for (const [index, width] of widths.entries()) {
+      await resize(page, width, height);
+      const contents = await measureContents(page.locator("body"));
+      expectSkeletonsMatch(contents, stored[index]!, `stored at ${width}px`);
+    }
   });
 }
 
-// The stored skeletons at widths inside the breakpoints, where they follow
-// the window like the content does.
-test.describe("stored skeletons between the breakpoints", () => {
-  for (const width of WIDTHS) {
-    for (const scenario of scenarios) {
-      if (width > (scenario.maxWidth ?? Infinity)) continue;
-      if (scenario.otherContent) continue;
-      test(`${width}px: ${titleOf(scenario)}`, async ({ page, baseURL }) => {
-        test.skip(
-          !test.info().project.name.endsWith("desktop"),
-          "once per playground",
-        );
-        await page.setViewportSize({ width, height: 900 });
-        await openScenario(page, baseURL!, scenario);
-        const stored = await measureSkeletons(page.locator("body"));
-        await setLoading(page, false);
-        const contents = await measureContents(page.locator("body"));
-        expectSkeletonsMatch(contents, stored, "stored");
-      });
-    }
+// A new window width, laid out: two frames, for what an effect changed.
+// Scrolled to the top, so sticky sidebars sit in the same place in both
+// phases (a tap scrolls).
+async function resize(page: Page, width: number, height: number) {
+  if (page.viewportSize()?.width !== width) {
+    await page.setViewportSize({ width, height });
   }
-});
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.evaluate(
+    () =>
+      new Promise((done) =>
+        requestAnimationFrame(() => requestAnimationFrame(done)),
+      ),
+  );
+}
 
 // The skeleton switches with CSS when the window gets narrower or wider:
 // measured at the desktop width, then at the phone width, the desktop

@@ -312,19 +312,10 @@ export const collections: Collection[] = [
     description: "Dialogs, menus and sheets.",
     items: 7,
     rank: 3,
-    private: true,
-  },
-  {
-    id: "3",
-    name: "Text",
-    emoji: "🔤",
-    description: "Lines that wrap at every width.",
-    items: 11,
-    rank: 2,
     private: false,
   },
   {
-    id: "4",
+    id: "3",
     name: "Charts",
     emoji: "📈",
     description:
@@ -335,25 +326,17 @@ export const collections: Collection[] = [
   },
 ];
 
-// More collections, shown after "Load more".
+// One more, shown after "Load more". Each collection has its own detail
+// page, all measured: few of them keep `ghostly measure` fast.
 export const moreCollections: Collection[] = [
   {
-    id: "5",
+    id: "4",
     name: "Forms",
     emoji: "📝",
     description: "Inputs, switches and radio cards.",
     items: 9,
     rank: 4,
     private: true,
-  },
-  {
-    id: "6",
-    name: "Media",
-    emoji: "🖼️",
-    description: "Images and video.",
-    items: 5,
-    rank: 1,
-    private: false,
   },
 ];
 
